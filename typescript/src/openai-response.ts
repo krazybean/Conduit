@@ -1,10 +1,7 @@
-import { ConduitError } from "./errors.js";
-import type { ErrorCode, ErrorDetails } from "./errors.js";
+import { object, textResponse } from "./response.js";
+import { ConduitError, httpFailure } from "./errors.js";
+import type { ErrorDetails } from "./errors.js";
 import type { GenerationResponse, Usage } from "./types.js";
-
-export function object(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 
 export function normalizeUsage(value: unknown): Usage | undefined {
   if (value !== undefined) {
@@ -35,15 +32,14 @@ export function decode(value: unknown, requestId: string | undefined, redact: (t
   const finishReason = choice.finish_reason === "tool_calls" ? "tool_call"
     : choice.finish_reason === "stop" || choice.finish_reason === "length" || choice.finish_reason === "content_filter"
       ? choice.finish_reason : "other";
-  return {
+  return textResponse({
     ...(typeof value.id === "string" && { id: redact(value.id) }),
     ...(typeof value.model === "string" && { model: redact(value.model) }),
-    content: typeof message.content === "string" ? [{ type: "text", text: redact(message.content) }] : [],
-    get text() { return this.content.map(part => part.text).join(""); },
+    content: typeof message.content === "string" ? [{ type: "text", text: message.content }] : [],
     finishReason,
     ...(usage !== undefined && { usage }),
     providerMetadata: { finishReason: redact(choice.finish_reason), ...(requestId !== undefined && { requestId }) },
-  };
+  });
 }
 
 export function httpError(status: number, body: string, requestId: string | undefined, redact: (text: string) => string): ConduitError {
@@ -58,13 +54,5 @@ export function httpError(status: number, body: string, requestId: string | unde
       }
     }
   } catch { /* HTTP status remains useful for empty, plain-text, or malformed bodies. */ }
-  const codes: Record<number, ErrorCode> = { 400: "InvalidRequestError", 401: "AuthenticationError", 403: "AuthorizationError", 408: "TimeoutError", 422: "InvalidRequestError", 429: "RateLimitError" };
-  const name = status === 404 && modelNotFound ? "ModelNotFoundError" : codes[status] ?? "ProviderError";
-  return new ConduitError(name, details.message || `Provider returned HTTP ${status}.`, {
-    statusCode: status,
-    ...(requestId !== undefined && { requestId }),
-    ...(details.code !== undefined && { providerCode: details.code }),
-    ...(Object.keys(details).length > 0 && { providerDetails: details }),
-  });
+  return httpFailure(status, details, requestId, modelNotFound);
 }
-

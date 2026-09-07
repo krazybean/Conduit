@@ -1,16 +1,74 @@
 # Ollama native driver
 
-Driver ID: `ollama`. Target native chat generation and native model listing,
-separately from using Ollama through the OpenAI-compatible driver. Endpoint
-configuration must support local or remote installations. No connection-time I/O.
+Driver ID: `ollama`. Native text generation and NDJSON streaming use POST
+`/api/chat`. The public client/model and generate/stream APIs are unchanged.
+Endpoint is an explicit HTTP(S) server base (e.g. http://localhost:11434); trim
+trailing slashes and append /api/chat, preserving custom base paths. Reject
+userinfo, query, and fragment. No autodetection, construction I/O, or redirects.
+Optional bearer credentials/custom headers use the existing protection rules.
 
-Map native messages/content, tools, completion status, and reported token usage
-into the common contract. Stream parsing must handle newline-delimited JSON
-across arbitrary byte chunks and assemble the final response. Keep native model
-size/family/quantization fields in ModelInfo metadata; do not infer capabilities
-from a model identifier. Document precise wire mappings with native fixtures.
+## Request mapping
 
-Native settings such as keep-alive and model-specific sampling options belong
-in provider options, with nested collisions against normalized mappings rejected.
-Do not expose model pulling, lifecycle management, embeddings, or app state.
-No implementation in this scaffold.
+Text-only system/user/assistant messages map to native string content. Concatenate
+ordered text parts without separators; no images/tools are flattened. The selected
+model and operation-owned stream flag are explicit. Common fields map as follows:
+
+| Common | Ollama wire |
+| --- | --- |
+| max_output_tokens | options.num_predict |
+| temperature | options.temperature |
+| top_p | options.top_p |
+| stop | options.stop |
+
+Positive safe integer output budgets, finite nonnegative temperature, top_p in
+0–1, and arrays of stop strings are accepted. Omitted values stay omitted.
+Provider options are acyclic JSON. Reserve model/messages/stream/tools/format and
+options.num_predict/temperature/top_p/stop, even if the common value is absent or
+equal. Only one shallow options merge is needed. Non-conflicting native fields
+such as keep_alive or options.num_ctx pass through. No think/reasoning API or
+implicit think setting is added; native think:false may be supplied explicitly.
+
+## Response and completion
+
+Require done:true for generate. Assistant message.content is a string, preserved
+unchanged even if it matches a secret. Model is optional, no response ID is
+invented. Stop/length reasons map directly; other or omitted done_reason maps to
+other. Only reported native reasons appear as providerMetadata.finishReason.
+Usage maps prompt_eval_count to input_tokens and eval_count to output_tokens;
+missing means absent. **Do not compute total_tokens**, even if both counts exist.
+Timing fields total_duration/load_duration/prompt_eval_duration/eval_duration
+remain native nanosecond fields in provider metadata, alongside created_at and
+requestId when supplied. Diagnostics are redacted, content is not.
+
+Native stream records require boolean done and valid assistant text messages;
+a terminal done:true record may omit message only after a valid message. Reported
+model identifiers must not change. Emit start once, nonempty text_delta (index 0),
+usage snapshots only for reported counts, and done with the shared final response.
+A valid done:true record completes the operation without an OpenAI finish marker
+or a required done_reason. Discard subsequent bytes by cancelling the reader.
+
+Use a separate incremental NDJSON reader: LF/CRLF, multiple records per read,
+split JSON/UTF-8/newlines, and a complete final EOF record without newline work.
+Ignore blank lines. Invalid UTF-8/JSON, partial final records, and EOF without
+valid done:true are ProtocolError. Stream media types application/x-ndjson,
+application/ndjson, and application/json are accepted. Meaningful tool, image,
+or thinking content is ProtocolError in this text-only slice, never silently lost.
+Empty thinking strings/tool/image arrays do not carry semantic output.
+
+Timeout, cancellation, first-abort-wins, early-break cleanup, and diagnostic
+redaction reuse the existing operation lifecycle. No retry or reconnect.
+HTTP mappings remain shared. Native error strings are preserved safely. A 404
+is ModelNotFoundError only for the exact native missing-model message naming the
+selected model (single/double quotes, including the older pull hint); generic
+404 remains ProviderError. In-band error strings are ProviderError, with no done.
+
+## Evidence and scope
+
+Checked against the official [chat API](https://docs.ollama.com/api/chat),
+[streaming](https://docs.ollama.com/api/streaming),
+[errors](https://docs.ollama.com/api/errors),
+[option meanings](https://docs.ollama.com/modelfile), and
+[server error handling](https://github.com/ollama/ollama/blob/main/server/routes.go).
+Fixtures are synthetic regression contracts, not live provider certification.
+Model listing (/api/tags), remote capabilities, tools, structured output, vision,
+embeddings, model pulling, and lifecycle management remain outside this slice.

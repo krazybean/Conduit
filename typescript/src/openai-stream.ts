@@ -1,5 +1,6 @@
+import { object } from "./response.js";
 import { ConduitError } from "./errors.js";
-import { decode, httpError, normalizeUsage, object } from "./openai-response.js";
+import { decode, httpError, normalizeUsage } from "./openai-response.js";
 import type { StreamEvent, Usage } from "./types.js";
 
 function protocol(): never {
@@ -47,7 +48,6 @@ export async function* openaiStream(
   body: ReadableStream<Uint8Array>,
   requestId: string | undefined,
   redact: (text: string) => string,
-  redactText: (text: string, flush?: boolean) => string,
 ): AsyncGenerator<StreamEvent> {
   let started = false;
   let id: string | undefined;
@@ -59,8 +59,6 @@ export async function* openaiStream(
   for await (const data of dataEvents(body)) {
     if (data === "[DONE]") {
       if (!started || finish === undefined) protocol();
-      const text = redactText("", true);
-      if (text) yield { type: "text_delta", index: 0, text };
       if (!message.content && finish === "content_filter") message.content = null;
       const response = decode({
         id, model,
@@ -102,8 +100,7 @@ export async function* openaiStream(
       yield { type: "start", ...(id !== undefined && { id: redact(id) }), ...(model !== undefined && { model: redact(model) }) };
     }
     message.content += content;
-    const text = redactText(content);
-    if (text) yield { type: "text_delta", index: 0, text };
+    if (content) yield { type: "text_delta", index: 0, text: content };
     if (reportedUsage) {
       usage = { ...usage, ...reportedUsage };
       yield { type: "usage", usage: { ...usage } };

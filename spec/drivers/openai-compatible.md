@@ -56,8 +56,8 @@ integers when reported; no missing counts are synthesized.
 Diagnostic metadata preserves the raw finish reason and request ID when present.
 HTTP error details preserve recognized message/type/code strings only. Raw bodies
 and native exception objects are not exposed. Known credential and custom-header
-values are redacted from diagnostic strings and returned content if echoed by
-the provider (including header values after HTTP whitespace normalization); causes
+values are redacted from diagnostic strings (including header values after HTTP
+whitespace normalization), never from generated semantic content; causes
 retain only sanitized native
 name/message/code. No request configuration is attached to results or errors.
 Custom headers cannot set authorization, proxy authorization, cookies, host,

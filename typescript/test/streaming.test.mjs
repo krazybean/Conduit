@@ -78,7 +78,7 @@ for (const f of fixtures) test(`stream fixture: ${f.id} (HTTP and exact read bou
     },
     cancel() { cancelled = true; },
   });
-  await verify(openaiStream(body, "stream-request", text => text, text => text), f.expected);
+  await verify(openaiStream(body, "stream-request", text => text), f.expected);
   assert.equal(body.locked, false);
   if (!f.expected.error) assert.ok(cancelled, "[DONE] should cancel the remaining body");
 });
@@ -87,7 +87,7 @@ test("every byte split reconstructs SSE, JSON, CRLF, UTF-8, and DONE", async () 
   const bytes = Buffer.concat(fixtures.find(f => f.id === "crlf").input.wire.fragments_base64.map(part => Buffer.from(part, "base64")));
   let index = 0;
   const body = new ReadableStream({ pull(controller) { if (index < bytes.length) controller.enqueue(bytes.subarray(index, ++index)); else controller.close(); } });
-  await verify(openaiStream(body, "stream-request", text => text, text => text), fixtures[0].expected);
+  await verify(openaiStream(body, "stream-request", text => text), fixtures[0].expected);
 });
 
 test("stream is lazy, uses the shared request, and yields before the provider finishes", async t => {
@@ -283,7 +283,7 @@ test("break and completed done release readers, connections, timers, and listene
   assert.equal((await iterator.next()).done, true);
 });
 
-test("secrets split across provider deltas are redacted incrementally and in the final response", async t => {
+test("semantic content matching secrets is preserved; diagnostics are redacted", async t => {
   const text = `before ${secret} and ${headerSecret} after`;
   const { endpoint } = await server(t, (_request, response) => {
     response.writeHead(200, { ...headers, "x-request-id": secret });
@@ -291,14 +291,16 @@ test("secrets split across provider deltas are redacted incrementally and in the
     response.end(ending);
   });
   const events = await collect(selected(endpoint, { credentials: secret, headers: { "x-private": ` ${headerSecret} ` } }).stream(input));
-  noSecrets(events);
+  for (const event of events) {
+    if (event.type === "start") noSecrets(event);
+    if (event.type === "done") noSecrets(event.response.providerMetadata);
+  }
   const deltas = events.filter(event => event.type === "text_delta").map(event => event.text).join("");
-  noSecrets(deltas);
-  assert.equal(deltas, "before [REDACTED] and[REDACTED]after");
+  assert.ok(deltas === text, "Semantic deltas must remain unchanged");
   assert.equal(events.at(-1).response.text, deltas);
 });
 
-test("overlapping secrets and trailing partial prefixes match generate's redaction", async t => {
+test("overlapping secret values and trailing prefixes remain semantic content", async t => {
   for (const [credentials, header, text] of [["ab", "bcd", "abcd ab a"], ["abc", "bc", "abcabc bc a"], ["secret", "REDACTED", "secret secre"]]) {
     const { endpoint } = await server(t, (_request, response, wire) => {
       if (wire.body.stream) {
@@ -310,7 +312,8 @@ test("overlapping secrets and trailing partial prefixes match generate's redacti
     const model = selected(endpoint, { credentials, headers: { "x-private": header } });
     const generated = await model.generate(input);
     const events = await collect(model.stream(input));
-    assert.equal(events.filter(event => event.type === "text_delta").map(event => event.text).join(""), generated.text);
+    assert.ok(generated.text === text, "Generation content must remain unchanged");
+    assert.ok(events.filter(event => event.type === "text_delta").map(event => event.text).join("") === text, "Streaming content must remain unchanged");
     assert.deepEqual(events.at(-1).response, generated);
   }
 });

@@ -26,3 +26,15 @@ export class ConduitError extends Error {
     Object.assign(this, details);
   }
 }
+
+// HTTP categories are shared; each wire parser supplies already-sanitized details.
+export function httpFailure(status: number, details: NonNullable<ErrorDetails["providerDetails"]>, requestId?: string, modelNotFound = false): ConduitError {
+  const codes: Record<number, ErrorCode> = { 400: "InvalidRequestError", 401: "AuthenticationError", 403: "AuthorizationError", 408: "TimeoutError", 422: "InvalidRequestError", 429: "RateLimitError" };
+  const name = status === 404 && modelNotFound ? "ModelNotFoundError" : codes[status] ?? "ProviderError";
+  return new ConduitError(name, details.message || `Provider returned HTTP ${status}.`, {
+    statusCode: status,
+    ...(requestId !== undefined && { requestId }),
+    ...(details.code !== undefined && { providerCode: details.code }),
+    ...(Object.keys(details).length > 0 && { providerDetails: details }),
+  });
+}

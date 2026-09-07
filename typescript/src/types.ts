@@ -1,6 +1,6 @@
 export interface ClientConfig {
-  driver: "openai-compatible";
-  /** API base URL, including any version prefix (e.g. http://localhost:1234/v1). */
+  driver: "openai-compatible" | "ollama";
+  /** OpenAI-compatible API base (including /v1), or Ollama server base. */
   endpoint: string;
   credentials?: string;
   headers?: Record<string, string>;
@@ -44,7 +44,7 @@ export interface GenerationResponse {
   readonly text: string;
   finishReason: "stop" | "length" | "tool_call" | "content_filter" | "other";
   usage?: Usage;
-  providerMetadata: { finishReason: string; requestId?: string };
+  providerMetadata: { finishReason?: string; requestId?: string; [key: string]: JsonValue | undefined };
 }
 
 export interface Client {

@@ -144,7 +144,7 @@ test("invalid configuration and case-insensitive protected headers never echo in
   for (const headers of [{ Authorization: secret }, { "aUtHoRiZaTiOn": secret }, { "Proxy-Authorization": secret }, { Cookie: secret }, { Host: "other" }, { "Content-Type": "text/plain" }, { "Content-Length": "0" }, { Connection: "close" }, { "bad\nheader": secret }]) {
     assert.throws(() => model("http://localhost/v1", { credentials: secret, headers }), error => { noSecrets(error); return isError("InvalidRequestError")(error); });
   }
-  for (const config of [{ driver: "ollama" }, { model: "" }, { model: 1 }, { timeout: 0 }, { credentials: "" }, { credentials: `${secret}\n` }, { typo: secret }]) {
+  for (const config of [{ driver: "unknown" }, { model: "" }, { model: 1 }, { timeout: 0 }, { credentials: "" }, { credentials: `${secret}\n` }, { typo: secret }]) {
     assert.throws(() => model("http://localhost/v1", config), isError("InvalidRequestError"));
   }
 });
@@ -182,7 +182,9 @@ test("provider diagnostics redact credentials and custom header values", async t
   const selected = model(endpoint, { credentials: secret, headers: { "x-private": ` ${headerSecret} ` } });
   await assert.rejects(selected.generate(input), error => { noSecrets(error); noSecrets(error.stack); return isError("AuthenticationError")(error); });
   failure = false;
-  noSecrets(await selected.generate(input));
+  const response = await selected.generate(input);
+  noSecrets(response.providerMetadata);
+  assert.ok(response.text === `Echo ${secret} ${headerSecret}`, "Semantic content must remain unchanged");
 });
 
 test("timeouts cover response reads and client defaults can be overridden", async t => {

@@ -125,7 +125,8 @@ only for authorization. Custom headers cannot set authorization, proxy
 authorization, cookies, host, content type/length, or connection/transfer headers.
 Returned client/model objects contain no serializable configuration or secrets.
 Known credential/custom-header values are redacted from provider diagnostics,
-response identifiers, and returned text if a provider echoes them. Raw and
+response identifiers, and diagnostic metadata. Generated semantic content is
+never redacted, including text equal to configured secrets. Raw and
 URL-encoded known values are redacted; unknown/transformed secrets cannot be
 identified automatically. Conduit does not log. Caller-owned input/configuration
 objects and application logging remain the caller's responsibility.
@@ -159,8 +160,8 @@ fetch, and the operation timeout start on first iteration. Events:
 Exactly one start/done on success. IDs/model first reported later appear in done;
 metadata holds only raw finish reason and request ID, never a chunk history.
 Final text is accumulated once; response.text remains a view over content.
-Concatenated text deltas agree with final text. Only possible secret prefixes
-are delayed for redaction across provider deltas; ordinary text is not retokenized.
+Concatenated text deltas agree with final text. Semantic output is passed through
+unchanged, including text that matches known secrets; nothing is delayed for redaction.
 
 Successful completion requires a valid single-choice stream, a string finish
 reason, and a blank-line-terminated `[DONE]` event. A finish reason alone or EOF
@@ -182,8 +183,8 @@ so consuming another event is unnecessary. Native generator return queues behind
 an outstanding next; use AbortSignal to interrupt that read. A dropped iterator
 cannot be detected automatically: close it or supply a cancellation signal.
 
-Buffering is limited to the current read/incomplete SSE event, bounded secret
-prefixes, and accumulated final text. There is no background queue or raw event
+Buffering is limited to the current read/incomplete SSE event and accumulated
+final text. There is no background queue or raw event
 log. A single unterminated event can grow until termination/cancellation; no
 arbitrary provider payload-size limit is imposed in this slice.
 

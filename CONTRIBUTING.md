@@ -58,7 +58,9 @@ Implement a **native Ollama text driver** using its native chat request/response
 and NDJSON stream protocol. Keep the existing client/model, text, usage, error,
 timeout/cancellation semantics; add shared native wire fixtures and local-server
 checks. No tools, structured output, or speculative provider plugin interface.
-OpenAI-compatible generate/stream tests must continue to pass unchanged.
+OpenAI-compatible generate/stream behavior must remain stable except for an
+explicitly requested spec correction. Diagnostic redaction must never rewrite
+provider-generated semantic content.
 
 Expected sequence: spec/scaffold → TypeScript/OpenAI-compatible text → TypeScript
 streaming → native Ollama → tools/structured output → Anthropic → Gemini → stable

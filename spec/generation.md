@@ -53,5 +53,10 @@ multiple candidates are not a common operation and must not be silently discarde
 
 `Usage` has optional nonnegative integer `input_tokens`, `output_tokens`, and
 `total_tokens`. Missing means not reported, never zero. Do not synthesize a total
-from partial counts. Provider cache/reasoning/token breakdowns remain metadata.
+from any counts; total_tokens is provider-reported only. Provider cache/reasoning/token breakdowns remain metadata.
 Metadata and errors must obey credential redaction requirements.
+
+Provider/model-generated content is application data. Never redact response.text,
+content parts, or future tool arguments/structured output merely because they
+match a known credential. Redaction applies to Conduit diagnostics, not semantic
+output. Applications decide how to display or log their content.

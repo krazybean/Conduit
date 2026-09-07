@@ -1,4 +1,6 @@
-import { decode, httpError, object } from "./openai-response.js";
+import { decode, httpError } from "./openai-response.js";
+import { object } from "./response.js";
+import { ollamaRequest, ollamaResponse, ollamaError, ollamaStream } from "./ollama.js";
 import { openaiStream } from "./openai-stream.js";
 import { ConduitError } from "./errors.js";
 import type { Client, ClientConfig, GenerationRequest, GenerationResponse, Model, StreamEvent } from "./types.js";
@@ -58,7 +60,7 @@ function json(value: unknown, parents = new Set<object>()): void {
   parents.delete(value);
 }
 
-function encode(model: string, request: GenerationRequest, streaming: boolean): string {
+function encode(model: string, request: GenerationRequest, streaming: boolean, driver: ClientConfig["driver"]): string {
   if (!object(request)) invalid("A generation request is required.");
   if (Object.keys(request).some(key => unsupportedFields.has(key))) {
     throw new ConduitError("UnsupportedCapabilityError", streaming ? "Only text streaming is implemented." : "Only non-streaming text generation is implemented.");
@@ -85,18 +87,19 @@ function encode(model: string, request: GenerationRequest, streaming: boolean): 
   });
   const { maxOutputTokens, temperature, topP, stop, providerOptions } = request;
   if (maxOutputTokens !== undefined && (!Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1)) invalid("maxOutputTokens must be a positive safe integer.");
-  if (temperature !== undefined && (!Number.isFinite(temperature) || temperature < 0 || temperature > 2)) invalid("temperature must be between 0 and 2.");
+  if (temperature !== undefined && (!Number.isFinite(temperature) || temperature < 0 || (driver === "openai-compatible" && temperature > 2))) invalid(driver === "ollama" ? "temperature must be finite and nonnegative." : "temperature must be between 0 and 2.");
   if (topP !== undefined && (!Number.isFinite(topP) || topP < 0 || topP > 1)) invalid("topP must be between 0 and 1.");
   if (stop !== undefined && (!Array.isArray(stop) || Array.from(stop).some(value => typeof value !== "string"))) invalid("stop must be an array of strings.");
   if (providerOptions !== undefined) {
     if (!object(providerOptions)) invalid("providerOptions must be an object.");
-    if (Object.keys(providerOptions).some(key => ownedFields.has(key) && !(streaming && key === "stream_options"))) invalid("providerOptions conflicts with a Conduit-owned field.");
-    if (streaming && providerOptions.stream_options !== undefined && !object(providerOptions.stream_options)) invalid("stream_options must be a JSON object.");
+    if (driver === "openai-compatible" && Object.keys(providerOptions).some(key => ownedFields.has(key) && !(streaming && key === "stream_options"))) invalid("providerOptions conflicts with a Conduit-owned field.");
+    if (driver === "openai-compatible" && streaming && providerOptions.stream_options !== undefined && !object(providerOptions.stream_options)) invalid("stream_options must be a JSON object.");
     try { json(providerOptions); } catch (error) {
       if (error instanceof ConduitError) throw error;
       invalid("providerOptions must contain plain JSON data.");
     }
   }
+  if (driver === "ollama") return ollamaRequest(model, messages, request, streaming);
   return JSON.stringify({ ...providerOptions, model, messages, stream: streaming,
     max_tokens: maxOutputTokens, temperature, top_p: topP, stop: stop === undefined ? undefined : Array.from(stop) });
 }
@@ -106,14 +109,15 @@ export function connect(config: ClientConfig): Client;
 export function connect(config: ClientConfig & { model?: string }): Client | Model {
   if (!object(config)) invalid("Client configuration is required.");
   keys(config, new Set(["driver", "endpoint", "credentials", "headers", "timeout", "model"]));
-  if (config.driver !== "openai-compatible") invalid("Only the openai-compatible driver is implemented.");
+  if (config.driver !== "openai-compatible" && config.driver !== "ollama") invalid("Unknown driver.");
+  const driver = config.driver;
   if (typeof config.endpoint !== "string") invalid("endpoint must be an HTTP(S) API base URL.");
   let endpoint: URL;
   try { endpoint = new URL(config.endpoint); } catch { invalid("endpoint must be an HTTP(S) API base URL."); }
   if (!["http:", "https:"].includes(endpoint.protocol) || endpoint.username || endpoint.password || endpoint.search || endpoint.hash || config.endpoint.includes("?") || config.endpoint.includes("#")) {
     invalid("endpoint must be an HTTP(S) API base URL without userinfo, query, or fragment.");
   }
-  endpoint.pathname = endpoint.pathname.replace(/\/+$/, "") + "/chat/completions";
+  endpoint.pathname = endpoint.pathname.replace(/\/+$/, "") + (driver === "ollama" ? "/api/chat" : "/chat/completions");
   const url = endpoint.href;
   const credentials = config.credentials;
   if (credentials !== undefined && (typeof credentials !== "string" || !/^[A-Za-z0-9._~+\/-]+=*$/.test(credentials))) invalid("credentials must be a nonempty bearer token.");
@@ -138,7 +142,7 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
   const redactions = [...new Set(secrets.flatMap(secret => [secret, encodeURIComponent(secret)]))].sort((a, b) => b.length - a.length);
   const redact = (text: string): string => redactions.reduce((result, secret) => result.split(secret).join("[REDACTED]"), text);
   async function* operation(id: string, request: GenerationRequest, streaming: boolean): AsyncGenerator<StreamEvent> {
-    const body = encode(id, request, streaming);
+    const body = encode(id, request, streaming, driver);
     const timeout = request.timeout ?? defaultTimeout;
     timeoutValue(request.timeout);
     const signal = request.signal;
@@ -159,25 +163,15 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
       if (!response.ok) {
         const text = await response.text();
         controller.signal.throwIfAborted();
-        throw httpError(response.status, text, requestId, redact);
+        throw driver === "ollama" ? ollamaError(response.status, text, requestId, redact, id) : httpError(response.status, text, requestId, redact);
       }
       if (streaming) {
-        if (!response.body || response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "text/event-stream") {
-          throw new ConduitError("ProtocolError", "Expected a text/event-stream response.");
+        const media = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
+        if (!response.body || !(driver === "ollama" ? ["application/x-ndjson", "application/ndjson", "application/json"].includes(media ?? "") : media === "text/event-stream")) {
+          throw new ConduitError("ProtocolError", driver === "ollama" ? "Expected an NDJSON response." : "Expected a text/event-stream response.");
         }
-        // Each replacement stage retains only a possible secret prefix across deltas.
-        // Stages preserve the same replacement order as generate's redact().
-        // ponytail: suffix scan is quadratic in secret length; use prefix matching if large secrets matter.
-        const pending = redactions.map(() => "");
-        const redactText = (text: string, flush = false): string => redactions.reduce((text, secret, index) => {
-          const parts = (pending[index] + text).split(secret);
-          const tail = parts.pop()!;
-          let keep = flush ? 0 : Math.min(secret.length - 1, tail.length);
-          while (keep && !secret.startsWith(tail.slice(-keep))) keep--;
-          pending[index] = keep ? tail.slice(-keep) : "";
-          return (parts.length ? parts.join("[REDACTED]") + "[REDACTED]" : "") + tail.slice(0, tail.length - keep);
-        }, text);
-        for await (const event of openaiStream(response.body, requestId, redact, redactText)) {
+        const events = driver === "ollama" ? ollamaStream(response.body, requestId, redact) : openaiStream(response.body, requestId, redact);
+        for await (const event of events) {
           controller.signal.throwIfAborted();
           if (event.type === "done") { result = event.response; break; }
           yield event;
@@ -190,7 +184,7 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
         try { value = JSON.parse(text); } catch {
           throw new ConduitError("ProtocolError", "Provider returned invalid JSON.");
         }
-        result = decode(value, requestId, redact);
+        result = driver === "ollama" ? ollamaResponse(value, requestId, redact) : decode(value, requestId, redact);
       }
     } catch (error) {
       if (controller.signal.aborted) throw controller.signal.reason;

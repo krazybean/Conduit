@@ -57,7 +57,6 @@ without closing it is not detectable: use for-await/break, return, or AbortSigna
 Resources are released before done is yielded, even if the consumer never asks
 for another event. No background event queue or reconnect is used.
 
-Known-secret redaction must span provider text deltas. Only a suffix that could
-complete a configured secret is delayed; ordinary text is yielded immediately.
-Final accumulated text and concatenated text_delta output must agree, including
-redaction. No raw event history is retained.
+Provider-generated text deltas and final content are application data: preserve
+them unchanged, even when they equal a credential or custom-header value.
+Redact only Conduit diagnostic surfaces. No raw event history is retained.
