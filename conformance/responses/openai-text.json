@@ -1,0 +1,271 @@
+[
+  {
+    "id": "text",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "x-request-id": "request-test"
+        },
+        "body": {
+          "id": "completion-test",
+          "model": "test-model",
+          "choices": [
+            {
+              "message": {
+                "role": "assistant",
+                "content": "Hello!"
+              },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 4,
+            "completion_tokens": 2,
+            "total_tokens": 6
+          }
+        }
+      }
+    },
+    "expected": {
+      "response": {
+        "id": "completion-test",
+        "model": "test-model",
+        "content": [
+          {
+            "type": "text",
+            "text": "Hello!"
+          }
+        ],
+        "finish_reason": "stop",
+        "provider_metadata": {
+          "finish_reason": "stop",
+          "request_id": "request-test"
+        },
+        "usage": {
+          "input_tokens": 4,
+          "output_tokens": 2,
+          "total_tokens": 6
+        }
+      }
+    }
+  },
+  {
+    "id": "missing-usage",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "x-request-id": "request-test"
+        },
+        "body": {
+          "id": "completion-test",
+          "model": "test-model",
+          "choices": [
+            {
+              "message": {
+                "role": "assistant",
+                "content": "Hello!"
+              },
+              "finish_reason": "stop"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "response": {
+        "id": "completion-test",
+        "model": "test-model",
+        "content": [
+          {
+            "type": "text",
+            "text": "Hello!"
+          }
+        ],
+        "finish_reason": "stop",
+        "provider_metadata": {
+          "finish_reason": "stop",
+          "request_id": "request-test"
+        }
+      }
+    }
+  },
+  {
+    "id": "partial-usage",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "x-request-id": "request-test"
+        },
+        "body": {
+          "id": "completion-test",
+          "model": "test-model",
+          "choices": [
+            {
+              "message": {
+                "role": "assistant",
+                "content": "Hello!"
+              },
+              "finish_reason": "length"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 0
+          }
+        }
+      }
+    },
+    "expected": {
+      "response": {
+        "id": "completion-test",
+        "model": "test-model",
+        "content": [
+          {
+            "type": "text",
+            "text": "Hello!"
+          }
+        ],
+        "finish_reason": "length",
+        "provider_metadata": {
+          "finish_reason": "length",
+          "request_id": "request-test"
+        },
+        "usage": {
+          "input_tokens": 0
+        }
+      }
+    }
+  },
+  {
+    "id": "future-finish",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "x-request-id": "request-test"
+        },
+        "body": {
+          "id": "completion-test",
+          "model": "test-model",
+          "choices": [
+            {
+              "message": {
+                "role": "assistant",
+                "content": "Hello!"
+              },
+              "finish_reason": "future_reason"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "response": {
+        "id": "completion-test",
+        "model": "test-model",
+        "content": [
+          {
+            "type": "text",
+            "text": "Hello!"
+          }
+        ],
+        "finish_reason": "other",
+        "provider_metadata": {
+          "finish_reason": "future_reason",
+          "request_id": "request-test"
+        }
+      }
+    }
+  },
+  {
+    "id": "tool-finish",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "x-request-id": "request-test"
+        },
+        "body": {
+          "id": "completion-test",
+          "model": "test-model",
+          "choices": [
+            {
+              "message": {
+                "role": "assistant",
+                "content": "Hello!"
+              },
+              "finish_reason": "tool_calls"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "response": {
+        "id": "completion-test",
+        "model": "test-model",
+        "content": [
+          {
+            "type": "text",
+            "text": "Hello!"
+          }
+        ],
+        "finish_reason": "tool_call",
+        "provider_metadata": {
+          "finish_reason": "tool_calls",
+          "request_id": "request-test"
+        }
+      }
+    }
+  },
+  {
+    "id": "filtered",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "x-request-id": "request-test"
+        },
+        "body": {
+          "id": "completion-test",
+          "model": "test-model",
+          "choices": [
+            {
+              "message": {
+                "role": "assistant",
+                "content": null
+              },
+              "finish_reason": "content_filter"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "response": {
+        "id": "completion-test",
+        "model": "test-model",
+        "content": [],
+        "finish_reason": "content_filter",
+        "provider_metadata": {
+          "finish_reason": "content_filter",
+          "request_id": "request-test"
+        }
+      }
+    }
+  }
+]

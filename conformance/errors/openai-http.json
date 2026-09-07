@@ -1,0 +1,396 @@
+[
+  {
+    "id": "401-invalid_api_key",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 401,
+        "headers": {
+          "x-request-id": "error-request"
+        },
+        "body": {
+          "error": {
+            "message": "Synthetic provider failure.",
+            "type": "request_error",
+            "code": "invalid_api_key"
+          }
+        }
+      }
+    },
+    "expected": {
+      "error": {
+        "category": "AuthenticationError",
+        "message": "Synthetic provider failure.",
+        "status_code": 401,
+        "provider_code": "invalid_api_key",
+        "request_id": "error-request",
+        "provider_details": {
+          "message": "Synthetic provider failure.",
+          "type": "request_error",
+          "code": "invalid_api_key"
+        }
+      }
+    }
+  },
+  {
+    "id": "403-permission_denied",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 403,
+        "headers": {
+          "x-request-id": "error-request"
+        },
+        "body": {
+          "error": {
+            "message": "Synthetic provider failure.",
+            "type": "request_error",
+            "code": "permission_denied"
+          }
+        }
+      }
+    },
+    "expected": {
+      "error": {
+        "category": "AuthorizationError",
+        "message": "Synthetic provider failure.",
+        "status_code": 403,
+        "provider_code": "permission_denied",
+        "request_id": "error-request",
+        "provider_details": {
+          "message": "Synthetic provider failure.",
+          "type": "request_error",
+          "code": "permission_denied"
+        }
+      }
+    }
+  },
+  {
+    "id": "429-rate_limit",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 429,
+        "headers": {
+          "x-request-id": "error-request"
+        },
+        "body": {
+          "error": {
+            "message": "Synthetic provider failure.",
+            "type": "request_error",
+            "code": "rate_limit"
+          }
+        }
+      }
+    },
+    "expected": {
+      "error": {
+        "category": "RateLimitError",
+        "message": "Synthetic provider failure.",
+        "status_code": 429,
+        "provider_code": "rate_limit",
+        "request_id": "error-request",
+        "provider_details": {
+          "message": "Synthetic provider failure.",
+          "type": "request_error",
+          "code": "rate_limit"
+        }
+      }
+    }
+  },
+  {
+    "id": "400-invalid_request",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 400,
+        "headers": {
+          "x-request-id": "error-request"
+        },
+        "body": {
+          "error": {
+            "message": "Synthetic provider failure.",
+            "type": "request_error",
+            "code": "invalid_request"
+          }
+        }
+      }
+    },
+    "expected": {
+      "error": {
+        "category": "InvalidRequestError",
+        "message": "Synthetic provider failure.",
+        "status_code": 400,
+        "provider_code": "invalid_request",
+        "request_id": "error-request",
+        "provider_details": {
+          "message": "Synthetic provider failure.",
+          "type": "request_error",
+          "code": "invalid_request"
+        }
+      }
+    }
+  },
+  {
+    "id": "422-invalid_request",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 422,
+        "headers": {
+          "x-request-id": "error-request"
+        },
+        "body": {
+          "error": {
+            "message": "Synthetic provider failure.",
+            "type": "request_error",
+            "code": "invalid_request"
+          }
+        }
+      }
+    },
+    "expected": {
+      "error": {
+        "category": "InvalidRequestError",
+        "message": "Synthetic provider failure.",
+        "status_code": 422,
+        "provider_code": "invalid_request",
+        "request_id": "error-request",
+        "provider_details": {
+          "message": "Synthetic provider failure.",
+          "type": "request_error",
+          "code": "invalid_request"
+        }
+      }
+    }
+  },
+  {
+    "id": "408-request_timeout",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 408,
+        "headers": {
+          "x-request-id": "error-request"
+        },
+        "body": {
+          "error": {
+            "message": "Synthetic provider failure.",
+            "type": "request_error",
+            "code": "request_timeout"
+          }
+        }
+      }
+    },
+    "expected": {
+      "error": {
+        "category": "TimeoutError",
+        "message": "Synthetic provider failure.",
+        "status_code": 408,
+        "provider_code": "request_timeout",
+        "request_id": "error-request",
+        "provider_details": {
+          "message": "Synthetic provider failure.",
+          "type": "request_error",
+          "code": "request_timeout"
+        }
+      }
+    }
+  },
+  {
+    "id": "500-internal_error",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 500,
+        "headers": {
+          "x-request-id": "error-request"
+        },
+        "body": {
+          "error": {
+            "message": "Synthetic provider failure.",
+            "type": "request_error",
+            "code": "internal_error"
+          }
+        }
+      }
+    },
+    "expected": {
+      "error": {
+        "category": "ProviderError",
+        "message": "Synthetic provider failure.",
+        "status_code": 500,
+        "provider_code": "internal_error",
+        "request_id": "error-request",
+        "provider_details": {
+          "message": "Synthetic provider failure.",
+          "type": "request_error",
+          "code": "internal_error"
+        }
+      }
+    }
+  },
+  {
+    "id": "503-unavailable",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 503,
+        "headers": {
+          "x-request-id": "error-request"
+        },
+        "body": {
+          "error": {
+            "message": "Synthetic provider failure.",
+            "type": "request_error",
+            "code": "unavailable"
+          }
+        }
+      }
+    },
+    "expected": {
+      "error": {
+        "category": "ProviderError",
+        "message": "Synthetic provider failure.",
+        "status_code": 503,
+        "provider_code": "unavailable",
+        "request_id": "error-request",
+        "provider_details": {
+          "message": "Synthetic provider failure.",
+          "type": "request_error",
+          "code": "unavailable"
+        }
+      }
+    }
+  },
+  {
+    "id": "404-model_not_found",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 404,
+        "headers": {
+          "x-request-id": "error-request"
+        },
+        "body": {
+          "error": {
+            "message": "Synthetic provider failure.",
+            "type": "request_error",
+            "code": "model_not_found"
+          }
+        }
+      }
+    },
+    "expected": {
+      "error": {
+        "category": "ModelNotFoundError",
+        "message": "Synthetic provider failure.",
+        "status_code": 404,
+        "provider_code": "model_not_found",
+        "request_id": "error-request",
+        "provider_details": {
+          "message": "Synthetic provider failure.",
+          "type": "request_error",
+          "code": "model_not_found"
+        }
+      }
+    }
+  },
+  {
+    "id": "404-not_found",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 404,
+        "headers": {
+          "x-request-id": "error-request"
+        },
+        "body": {
+          "error": {
+            "message": "Synthetic provider failure.",
+            "type": "request_error",
+            "code": "not_found"
+          }
+        }
+      }
+    },
+    "expected": {
+      "error": {
+        "category": "ProviderError",
+        "message": "Synthetic provider failure.",
+        "status_code": 404,
+        "provider_code": "not_found",
+        "request_id": "error-request",
+        "provider_details": {
+          "message": "Synthetic provider failure.",
+          "type": "request_error",
+          "code": "not_found"
+        }
+      }
+    }
+  },
+  {
+    "id": "malformed-error",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 503,
+        "body_text": "{\"error\":"
+      }
+    },
+    "expected": {
+      "error": {
+        "category": "ProviderError",
+        "message": "Provider returned HTTP 503.",
+        "status_code": 503
+      }
+    }
+  },
+  {
+    "id": "plain-error",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 503,
+        "body_text": "Service unavailable"
+      }
+    },
+    "expected": {
+      "error": {
+        "category": "ProviderError",
+        "message": "Provider returned HTTP 503.",
+        "status_code": 503
+      }
+    }
+  },
+  {
+    "id": "empty-error",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 503,
+        "body_text": ""
+      }
+    },
+    "expected": {
+      "error": {
+        "category": "ProviderError",
+        "message": "Provider returned HTTP 503.",
+        "status_code": 503
+      }
+    }
+  }
+]

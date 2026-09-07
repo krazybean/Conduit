@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Conduit language build artifacts
+node_modules/
+*.tsbuildinfo
+/rust/Cargo.lock

@@ -1,0 +1,5 @@
+[project]
+name = "conduit"
+version = "0.0.0"
+description = "Conduit Python scaffold; source imports only, no public API yet"
+# Build backend and release metadata are deferred until implementation.
