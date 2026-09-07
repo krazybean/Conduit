@@ -1,10 +1,11 @@
+import { decode, httpError, object } from "./openai-response.js";
+import { openaiStream } from "./openai-stream.js";
 import { ConduitError } from "./errors.js";
-import type { ErrorCode, ErrorDetails } from "./errors.js";
-import type { Client, ClientConfig, GenerationRequest, GenerationResponse, Model, Usage } from "./types.js";
+import type { Client, ClientConfig, GenerationRequest, GenerationResponse, Model, StreamEvent } from "./types.js";
 
 export { ConduitError } from "./errors.js";
 export type { ErrorCode, ErrorDetails } from "./errors.js";
-export type { Client, ClientConfig, GenerationRequest, GenerationResponse, JsonValue, Message, Model, TextPart, Usage } from "./types.js";
+export type { Client, ClientConfig, GenerationRequest, GenerationResponse, JsonValue, Message, Model, StreamEvent, TextPart, Usage } from "./types.js";
 
 const ownedFields = new Set([
   "model", "messages", "stream", "stream_options", "max_tokens", "max_completion_tokens",
@@ -19,10 +20,6 @@ const requestFields = new Set([
   "messages", "maxOutputTokens", "temperature", "topP", "stop", "providerOptions", "signal", "timeout",
 ]);
 const unsupportedFields = new Set(["tools", "toolChoice", "responseFormat", "stream", "reasoning", "vision"]);
-
-function object(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 
 function invalid(message: string): never {
   throw new ConduitError("InvalidRequestError", message);
@@ -61,10 +58,10 @@ function json(value: unknown, parents = new Set<object>()): void {
   parents.delete(value);
 }
 
-function encode(model: string, request: GenerationRequest): string {
+function encode(model: string, request: GenerationRequest, streaming: boolean): string {
   if (!object(request)) invalid("A generation request is required.");
   if (Object.keys(request).some(key => unsupportedFields.has(key))) {
-    throw new ConduitError("UnsupportedCapabilityError", "Only non-streaming text generation is implemented.");
+    throw new ConduitError("UnsupportedCapabilityError", streaming ? "Only text streaming is implemented." : "Only non-streaming text generation is implemented.");
   }
   keys(request, requestFields);
   if (!Array.isArray(request.messages) || request.messages.length === 0) invalid("messages must be a nonempty array.");
@@ -93,72 +90,15 @@ function encode(model: string, request: GenerationRequest): string {
   if (stop !== undefined && (!Array.isArray(stop) || Array.from(stop).some(value => typeof value !== "string"))) invalid("stop must be an array of strings.");
   if (providerOptions !== undefined) {
     if (!object(providerOptions)) invalid("providerOptions must be an object.");
-    if (Object.keys(providerOptions).some(key => ownedFields.has(key))) invalid("providerOptions conflicts with a Conduit-owned field.");
+    if (Object.keys(providerOptions).some(key => ownedFields.has(key) && !(streaming && key === "stream_options"))) invalid("providerOptions conflicts with a Conduit-owned field.");
+    if (streaming && providerOptions.stream_options !== undefined && !object(providerOptions.stream_options)) invalid("stream_options must be a JSON object.");
     try { json(providerOptions); } catch (error) {
       if (error instanceof ConduitError) throw error;
       invalid("providerOptions must contain plain JSON data.");
     }
   }
-  return JSON.stringify({ ...providerOptions, model, messages, stream: false,
+  return JSON.stringify({ ...providerOptions, model, messages, stream: streaming,
     max_tokens: maxOutputTokens, temperature, top_p: topP, stop: stop === undefined ? undefined : Array.from(stop) });
-}
-
-function decode(value: unknown, requestId: string | undefined, redact: (text: string) => string): GenerationResponse {
-  function protocol(): never { throw new ConduitError("ProtocolError", "Malformed or unsupported Chat Completions response."); }
-  if (!object(value) || !Array.isArray(value.choices) || value.choices.length !== 1) protocol();
-  const choice: unknown = value.choices[0];
-  if (!object(choice) || !object(choice.message) || choice.message.role !== "assistant" || typeof choice.finish_reason !== "string") protocol();
-  const message = choice.message;
-  if (Object.entries(message).some(([key, data]) => !["role", "content"].includes(key) && data != null && !(key === "tool_calls" && Array.isArray(data) && data.length === 0))) protocol();
-  if (typeof message.content !== "string" && !(message.content === null && choice.finish_reason === "content_filter")) protocol();
-  if (value.id !== undefined && typeof value.id !== "string") protocol();
-  if (value.model !== undefined && typeof value.model !== "string") protocol();
-  let usage: Usage | undefined;
-  if (value.usage !== undefined) {
-    if (!object(value.usage)) protocol();
-    usage = {};
-    for (const [wire, normalized] of [["prompt_tokens", "inputTokens"], ["completion_tokens", "outputTokens"], ["total_tokens", "totalTokens"]] as const) {
-      const count = value.usage[wire];
-      if (count !== undefined) {
-        if (typeof count !== "number" || !Number.isSafeInteger(count) || count < 0) protocol();
-        usage[normalized] = count;
-      }
-    }
-  }
-  const finishReason = choice.finish_reason === "tool_calls" ? "tool_call"
-    : choice.finish_reason === "stop" || choice.finish_reason === "length" || choice.finish_reason === "content_filter"
-      ? choice.finish_reason : "other";
-  return {
-    ...(typeof value.id === "string" && { id: redact(value.id) }),
-    ...(typeof value.model === "string" && { model: redact(value.model) }),
-    content: typeof message.content === "string" ? [{ type: "text", text: redact(message.content) }] : [],
-    get text() { return this.content.map(part => part.text).join(""); },
-    finishReason,
-    ...(usage !== undefined && { usage }),
-    providerMetadata: { finishReason: redact(choice.finish_reason), ...(requestId !== undefined && { requestId }) },
-  };
-}
-
-function httpError(status: number, body: string, requestId: string | undefined, redact: (text: string) => string): ConduitError {
-  const details: NonNullable<ErrorDetails["providerDetails"]> = {};
-  let modelNotFound = false;
-  try {
-    const value: unknown = JSON.parse(body);
-    if (object(value) && object(value.error)) {
-      modelNotFound = value.error.code === "model_not_found";
-      for (const field of ["message", "type", "code"] as const) {
-        if (typeof value.error[field] === "string") details[field] = redact(value.error[field]);
-      }
-    }
-  } catch { /* HTTP status remains useful for empty, plain-text, or malformed bodies. */ }
-  const codes: Record<number, ErrorCode> = { 400: "InvalidRequestError", 401: "AuthenticationError", 403: "AuthorizationError", 408: "TimeoutError", 422: "InvalidRequestError", 429: "RateLimitError" };
-  const name = status === 404 && modelNotFound ? "ModelNotFoundError" : codes[status] ?? "ProviderError";
-  return new ConduitError(name, details.message || `Provider returned HTTP ${status}.`, {
-    statusCode: status,
-    ...(requestId !== undefined && { requestId }),
-    ...(details.code !== undefined && { providerCode: details.code }),
-    ...(Object.keys(details).length > 0 && { providerDetails: details }),
-  });
 }
 
 export function connect(config: ClientConfig & { model: string }): Model;
@@ -197,52 +137,96 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
   // ponytail: known raw/URL-encoded secrets only; add encodings when a provider demonstrates them.
   const redactions = [...new Set(secrets.flatMap(secret => [secret, encodeURIComponent(secret)]))].sort((a, b) => b.length - a.length);
   const redact = (text: string): string => redactions.reduce((result, secret) => result.split(secret).join("[REDACTED]"), text);
+  async function* operation(id: string, request: GenerationRequest, streaming: boolean): AsyncGenerator<StreamEvent> {
+    const body = encode(id, request, streaming);
+    const timeout = request.timeout ?? defaultTimeout;
+    timeoutValue(request.timeout);
+    const signal = request.signal;
+    if (signal !== undefined && !(signal instanceof AbortSignal)) invalid("signal must be an AbortSignal.");
+    const controller = new AbortController();
+    const cancel = () => controller.abort(new ConduitError("CancelledError", "Request cancelled by caller."));
+    if (signal?.aborted) cancel();
+    else signal?.addEventListener("abort", cancel, { once: true });
+    const timer = timeout === undefined ? undefined : setTimeout(() => controller.abort(new ConduitError("TimeoutError", "Request deadline exceeded.")), timeout);
+    let response: Response | undefined;
+    let requestId: string | undefined;
+    let result: GenerationResponse | undefined;
+    try {
+      controller.signal.throwIfAborted();
+      response = await fetch(url, { method: "POST", headers, body, signal: controller.signal, redirect: "manual" });
+      const rawRequestId = response.headers.get("x-request-id") ?? response.headers.get("request-id");
+      requestId = rawRequestId === null ? undefined : redact(rawRequestId);
+      if (!response.ok) {
+        const text = await response.text();
+        controller.signal.throwIfAborted();
+        throw httpError(response.status, text, requestId, redact);
+      }
+      if (streaming) {
+        if (!response.body || response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "text/event-stream") {
+          throw new ConduitError("ProtocolError", "Expected a text/event-stream response.");
+        }
+        // Each replacement stage retains only a possible secret prefix across deltas.
+        // Stages preserve the same replacement order as generate's redact().
+        // ponytail: suffix scan is quadratic in secret length; use prefix matching if large secrets matter.
+        const pending = redactions.map(() => "");
+        const redactText = (text: string, flush = false): string => redactions.reduce((text, secret, index) => {
+          const parts = (pending[index] + text).split(secret);
+          const tail = parts.pop()!;
+          let keep = flush ? 0 : Math.min(secret.length - 1, tail.length);
+          while (keep && !secret.startsWith(tail.slice(-keep))) keep--;
+          pending[index] = keep ? tail.slice(-keep) : "";
+          return (parts.length ? parts.join("[REDACTED]") + "[REDACTED]" : "") + tail.slice(0, tail.length - keep);
+        }, text);
+        for await (const event of openaiStream(response.body, requestId, redact, redactText)) {
+          controller.signal.throwIfAborted();
+          if (event.type === "done") { result = event.response; break; }
+          yield event;
+          controller.signal.throwIfAborted();
+        }
+      } else {
+        const text = await response.text();
+        controller.signal.throwIfAborted();
+        let value: unknown;
+        try { value = JSON.parse(text); } catch {
+          throw new ConduitError("ProtocolError", "Provider returned invalid JSON.");
+        }
+        result = decode(value, requestId, redact);
+      }
+    } catch (error) {
+      if (controller.signal.aborted) throw controller.signal.reason;
+      if (error instanceof ConduitError) {
+        if (error.name === "ProtocolError" && response) {
+          error.statusCode = response.status;
+          if (requestId !== undefined) error.requestId = requestId;
+        }
+        throw error;
+      }
+      const native = error instanceof Error ? error : undefined;
+      const cause = native && object(native.cause) ? native.cause : native;
+      throw new ConduitError("ConnectionError", "Provider connection failed.", {
+        ...(cause && { cause: { name: redact(typeof cause.name === "string" ? cause.name : "Error"), message: redact(typeof cause.message === "string" ? cause.message : "Native fetch failed."), ...("code" in cause && typeof cause.code === "string" && { code: redact(cause.code) }) } }),
+      });
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", cancel);
+      controller.abort();
+      // The parser cancels its locked reader; this covers bodies rejected before parsing.
+      if (response?.body && !response.body.locked) await response.body.cancel().catch(() => {});
+    }
+    if (result) yield { type: "done", response: result };
+  }
   const client: Client = Object.freeze({
     model(id: string): Model {
       if (typeof id !== "string" || !id.trim()) invalid("model must be a nonempty string.");
       return Object.freeze({
         async generate(request: GenerationRequest): Promise<GenerationResponse> {
-          const body = encode(id, request);
-          const timeout = request.timeout ?? defaultTimeout;
-          timeoutValue(request.timeout);
-          const signal = request.signal;
-          if (signal !== undefined && !(signal instanceof AbortSignal)) invalid("signal must be an AbortSignal.");
-          const controller = new AbortController();
-          const cancel = () => controller.abort(new ConduitError("CancelledError", "Request cancelled by caller."));
-          if (signal?.aborted) cancel();
-          else signal?.addEventListener("abort", cancel, { once: true });
-          const timer = timeout === undefined ? undefined : setTimeout(() => controller.abort(new ConduitError("TimeoutError", "Request deadline exceeded.")), timeout);
-          try {
-            controller.signal.throwIfAborted();
-            const response = await fetch(url, { method: "POST", headers, body, signal: controller.signal, redirect: "manual" });
-            const rawRequestId = response.headers.get("x-request-id") ?? response.headers.get("request-id");
-            const requestId = rawRequestId === null ? undefined : redact(rawRequestId);
-            const text = await response.text();
-            controller.signal.throwIfAborted();
-            if (!response.ok) throw httpError(response.status, text, requestId, redact);
-            let value: unknown;
-            try { value = JSON.parse(text); } catch {
-              throw new ConduitError("ProtocolError", "Provider returned invalid JSON.", { statusCode: response.status, ...(requestId !== undefined && { requestId }) });
-            }
-            try { return decode(value, requestId, redact); } catch (error) {
-              if (error instanceof ConduitError) {
-                error.statusCode = response.status;
-                if (requestId !== undefined) error.requestId = requestId;
-              }
-              throw error;
-            }
-          } catch (error) {
-            if (controller.signal.aborted) throw controller.signal.reason;
-            if (error instanceof ConduitError) throw error;
-            const native = error instanceof Error ? error : undefined;
-            const cause = native && object(native.cause) ? native.cause : native;
-            throw new ConduitError("ConnectionError", "Provider connection failed.", {
-              ...(cause && { cause: { name: redact(typeof cause.name === "string" ? cause.name : "Error"), message: redact(typeof cause.message === "string" ? cause.message : "Native fetch failed."), ...("code" in cause && typeof cause.code === "string" && { code: redact(cause.code) }) } }),
-            });
-          } finally {
-            clearTimeout(timer);
-            signal?.removeEventListener("abort", cancel);
+          for await (const event of operation(id, request, false)) {
+            if (event.type === "done") return event.response;
           }
+          throw new ConduitError("ProtocolError", "Missing generation response.");
+        },
+        stream(request: GenerationRequest): AsyncGenerator<StreamEvent> {
+          return operation(id, request, true);
         },
       });
     },

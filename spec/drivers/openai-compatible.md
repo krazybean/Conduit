@@ -24,17 +24,15 @@ The first slice maps the output budget to `max_tokens`, for broad compatibility;
 endpoint/model rejects a normalized feature, surface a normalized error.
 Do not silently try another field, model, endpoint, or API.
 
-Listing may use the compatible model-list endpoint where supported; absent
-listing support is an explicit unsupported error. Streaming will parse SSE with
-arbitrary fragmentation and protocol completion/usage handling. Tools will
-accumulate function argument JSON across deltas. These are future slices, not
-implemented operations. Native finish reasons and extra usage remain metadata.
+Listing and tools remain future slices. Text streaming is specified below.
+Native finish reasons remain diagnostic metadata.
 
 ## Implemented first slice
 
-TypeScript supports non-streaming text generation only. Text parts are sent as
-ordered Chat Completions text parts; string input normalizes to a single text
-part. Wire `stream` is always false. Common fields map directly to `max_tokens`,
+TypeScript supports non-streaming text generation and the text-streaming slice
+described below. Text parts are sent as ordered Chat Completions text parts; string input normalizes to a single text
+part. Wire `stream` is false for generate and true for stream. Common fields map
+directly to `max_tokens`,
 `temperature` (0–2), `top_p` (0–1), and `stop` (an array of strings). Output token
 budgets are positive safe integers. Unknown common request/config/message fields
 are rejected rather than ignored. Native options must be finite, acyclic JSON
@@ -69,3 +67,39 @@ are treated as sensitive internally.
 HTTP 408 maps to TimeoutError. ModelNotFoundError requires HTTP 404 and the exact
 provider code `model_not_found`; generic 404 remains ProviderError. Other native
 codes remain diagnostic until evidence justifies additional mappings.
+
+## Streaming slice
+
+Reuse the same request mapping. Only stream() permits native `stream_options`
+through provider_options; it must be a JSON object. No usage option is injected.
+In particular, callers may supply `stream_options: {include_usage: true}`.
+Generate still rejects stream_options. The owned `stream` flag and `n` remain
+protected in both operations, as do all other reserved fields above.
+
+Require a successful HTTP response with `text/event-stream` media type (parameters
+allowed), followed by valid UTF-8 SSE. Parse LF, CRLF, and CR line endings, joining
+multiple data lines with newline. Ignore comments and other SSE fields. A blank
+line dispatches an event; unfinished data at EOF is not dispatched, per the
+[SSE standard](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation).
+Malformed JSON/UTF-8 is ProtocolError, with no raw payload in the error.
+
+Success requires a valid single-choice stream, a string finish reason, and a
+blank-line-terminated `[DONE]` data event. EOF alone, a finish reason without
+[DONE], and [DONE] without a finish reason are ProtocolError. [DONE] ends the
+protocol; cancel remaining body reads rather than waiting for socket closure.
+No events after that marker are processed. Meaningful text after a finish reason,
+changing response IDs/models, nonzero/multiple choices, or meaningful non-text
+content (including tool calls) are ProtocolError. Null/empty content deltas and
+assistant-role-only deltas are valid; empty text deltas are not emitted.
+
+A choices-empty chunk is accepted only for reported usage after the stream has
+started. Usage may arrive with a choice or before [DONE]; null/omitted usage means
+no report, and partial snapshots preserve previously known counts. Start contains
+only the ID/model known at the first validated choice; identifiers first reported
+later appear in the final response. No model identifier is invented.
+A JSON error envelope in an SSE data event raises ProviderError with the existing
+sanitized provider diagnostics; without an HTTP failure status, do not guess an
+HTTP category from prose. Missing IDs/usage remain absent. Final normalization
+reuses generate's response/usage/finish rules. A content_filter finish with no
+nonempty text (including an initial role/empty-string delta) produces empty
+content, corresponding to a non-streaming filtered response with null content. No raw chunk log is kept as metadata.

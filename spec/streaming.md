@@ -38,3 +38,26 @@ Release resources on completion, failure, timeout, cancellation, or abandoned
 iteration. There is no separate `error` event or automatic reconnection/retry.
 Image streaming is not specified yet; unsupported content must fail explicitly,
 not disappear from the final response.
+
+## Implemented TypeScript text stream
+
+`model.stream(GenerationRequest)` returns an async generator immediately; request
+validation and I/O begin on the first iteration. There is no extra await before
+`for await`. Events are `start` (optional id/model), `text_delta` (index 0 and
+nonempty text), `usage` (cumulative normalized usage), and `done` (the same
+GenerationResponse as generate). Tool deltas remain reserved, not implemented.
+
+The timeout starts when iteration begins and covers the whole operation,
+including pauses between iterator reads. The first caller/deadline abort wins.
+A failure after partial text throws through the iterator, with no done. Stopping
+with `break`/iterator return cancels the reader and releases transport resources
+without an artificial error. Native async-generator return queues behind a pending
+next; use AbortSignal to interrupt an outstanding read. Abandoning an iterator
+without closing it is not detectable: use for-await/break, return, or AbortSignal.
+Resources are released before done is yielded, even if the consumer never asks
+for another event. No background event queue or reconnect is used.
+
+Known-secret redaction must span provider text deltas. Only a suffix that could
+complete a configured secret is delayed; ordinary text is yielded immediately.
+Final accumulated text and concatenated text_delta output must agree, including
+redaction. No raw event history is retained.

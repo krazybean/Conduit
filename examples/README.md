@@ -11,5 +11,11 @@ CONDUIT_ENDPOINT=http://localhost:1234/v1 CONDUIT_MODEL=my-model node examples/t
 
 The endpoint must be a running Chat Completions-compatible API base URL. Supply
 CONDUIT_API_KEY in the environment only when that endpoint requires bearer auth.
-The TypeScript test suite also executes this example against its local mock
-server. Python/Rust examples remain reserved until their implementations exist.
+For incremental output, run [stream.mjs](typescript/stream.mjs) with the same
+environment settings:
+
+```sh
+CONDUIT_ENDPOINT=http://localhost:1234/v1 CONDUIT_MODEL=my-model node examples/typescript/stream.mjs
+```
+
+The TypeScript test suite executes both examples against its local mock server. Python/Rust examples remain reserved until their implementations exist.

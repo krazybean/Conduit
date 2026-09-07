@@ -3,8 +3,8 @@
 A lightweight, dependency-minimal AI model driver library for local and hosted
 providers. Small, explicit model access in the spirit of `requests` or `pg`.
 
-**Implemented:** TypeScript/JavaScript non-streaming OpenAI-compatible Chat
-Completions text generation. Python, Rust, and other drivers remain scaffolds.
+**Implemented:** TypeScript/JavaScript OpenAI-compatible Chat Completions text
+generation and streaming. Python, Rust, and other drivers remain scaffolds.
 The package is local/private; nothing is published yet.
 
 ```ts
@@ -20,6 +20,15 @@ const response = await model.generate({
   messages: [{ role: "user", content: "Hello" }],
 });
 console.log(response.text);
+```
+
+Stream using the same model and request options:
+
+```ts
+for await (const event of model.stream({ messages: [{ role: "user", content: "Hello" }] })) {
+  if (event.type === "text_delta") process.stdout.write(event.text);
+  // event.type === "done" exposes the final GenerationResponse in event.response.
+}
 ```
 
 Or create a client without a model or network request, then select locally:
@@ -42,7 +51,7 @@ requires a running compatible endpoint. See the [TypeScript API](typescript/READ
 for options, errors, cancellation, and endpoint semantics.
 
 Conduit connects to providers and normalizes generation, content, usage, and
-errors. Applications own conversation history. Discovery, streaming, transport-only
+errors. Applications own conversation history. Discovery, transport-only
 tools, structured output, and additional drivers are future slices. Conduit does
 not provide agents, routing, fallback, RAG, memory, workflows, or retries.
 
@@ -54,10 +63,10 @@ Completions, native Ollama, Anthropic Messages, and stateless Gemini Interaction
 | Directory | Purpose |
 | --- | --- |
 | `spec/` | Common semantics and driver boundaries |
-| `conformance/` | Shared request, response, and error fixtures |
+| `conformance/` | Shared request, response, error, and byte-fragment stream fixtures |
 | `typescript/` | Working text-generation slice and local-server tests |
 | `python/`, `rust/` | Empty language project scaffolds |
-| `examples/` | Runnable JavaScript example; other languages reserved |
+| `examples/` | Runnable JavaScript examples; other languages reserved |
 
 [Contributing](CONTRIBUTING.md) requires Ponytail for every task. Zero runtime
 dependencies; TypeScript is the only development dependency. Existing

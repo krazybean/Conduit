@@ -54,13 +54,11 @@ Do not publish these private/pre-release packages without explicit authorization
 
 ## Next slice
 
-Implement TypeScript OpenAI-compatible **text streaming** via `.stream(request)`.
-Reuse current validation, protected native options, errors, and cancellation;
-add incremental SSE decoding and start/text_delta/usage/done accumulation.
-Add shared fragmentation, UTF-8, completion, premature EOF, and stream failure
-fixtures. Defer tools, structured output, listing, and additional drivers.
-The shorthand constructor is implemented using two overloads; it needs no further
-factory layer. Keep the scope test above binding for every following slice.
+Implement a **native Ollama text driver** using its native chat request/response
+and NDJSON stream protocol. Keep the existing client/model, text, usage, error,
+timeout/cancellation semantics; add shared native wire fixtures and local-server
+checks. No tools, structured output, or speculative provider plugin interface.
+OpenAI-compatible generate/stream tests must continue to pass unchanged.
 
 Expected sequence: spec/scaffold → TypeScript/OpenAI-compatible text → TypeScript
 streaming → native Ollama → tools/structured output → Anthropic → Gemini → stable

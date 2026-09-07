@@ -60,7 +60,7 @@ No automatic retries, even for timeout or cancellation.
 
 Node 22.13+ ESM; native fetch and AbortController, no HTTP runtime dependency.
 `connect(config)` returns a client with `.model(id)`; `connect({...config, model})`
-returns a selected model with `.generate(request)`. No other operations are
+returns a selected model with `.generate(request)` and `.stream(request)`. No other operations are
 exposed yet. Credentials are an optional bearer-token string; configuration uses
 `headers` for custom string-valued headers and optional `timeout` in milliseconds.
 Per-request `timeout` overrides the client default. There is no Conduit deadline

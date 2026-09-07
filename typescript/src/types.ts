@@ -51,6 +51,13 @@ export interface Client {
   model(id: string): Model;
 }
 
+export type StreamEvent =
+  | { type: "start"; id?: string; model?: string }
+  | { type: "text_delta"; index: 0; text: string }
+  | { type: "usage"; usage: Usage }
+  | { type: "done"; response: GenerationResponse };
+
 export interface Model {
   generate(request: GenerationRequest): Promise<GenerationResponse>;
+  stream(request: GenerationRequest): AsyncGenerator<StreamEvent>;
 }

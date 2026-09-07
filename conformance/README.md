@@ -51,4 +51,15 @@ Implemented files: `requests/openai-text.json` (one request),
 `responses/openai-text.json` (six responses), and `errors/openai-http.json`
 (thirteen HTTP errors). These synthetic wire examples are regression contracts,
 not claims of certification against any live provider. Run all 20 cases with
-`npm test --prefix typescript`. Streams/capabilities remain placeholders.
+`npm test --prefix typescript`. Capabilities remain placeholders.
+
+Streaming: `streams/openai-text.json` adds 22 cases with explicit base64 read
+boundaries and expected normalized events or a terminal error category. Coverage
+includes normal/multiple/split events, CRLF/CR, UTF-8 splits, split DONE, multiline
+data/comments/BOM, missing/partial usage, unknown finish reasons, empty/filtered
+output, malformed payloads, tools, and incomplete completion/EOF.
+
+TypeScript replays each case through localhost HTTP and a native ReadableStream
+with exactly those read boundaries, because TCP may combine writes. A one-byte
+repartition check additionally exercises all boundaries in the CRLF/UTF-8 case.
+No live provider, new runner framework, or generated fixture schema is required.

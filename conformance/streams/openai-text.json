@@ -1,0 +1,1068 @@
+[
+  {
+    "id": "normal",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IkhlbGxvICJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV0sImlkIjoic3RyZWFtLXRlc3QiLCJtb2RlbCI6InRlc3QtbW9kZWwifQoK",
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IuS4lueVjCJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV19Cgo=",
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnt9LCJmaW5pc2hfcmVhc29uIjoic3RvcCJ9XX0KCg==",
+          "ZGF0YTogeyJjaG9pY2VzIjpbXSwidXNhZ2UiOnsicHJvbXB0X3Rva2VucyI6NCwiY29tcGxldGlvbl90b2tlbnMiOjIsInRvdGFsX3Rva2VucyI6Nn19Cgo=",
+          "ZGF0YTogW0RPTkVdCgo="
+        ]
+      }
+    },
+    "expected": {
+      "events": [
+        {
+          "type": "start",
+          "id": "stream-test",
+          "model": "test-model"
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "Hello "
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "世界"
+        },
+        {
+          "type": "usage",
+          "usage": {
+            "input_tokens": 4,
+            "output_tokens": 2,
+            "total_tokens": 6
+          }
+        },
+        {
+          "type": "done",
+          "response": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Hello 世界"
+              }
+            ],
+            "finish_reason": "stop",
+            "provider_metadata": {
+              "finish_reason": "stop",
+              "request_id": "stream-request"
+            },
+            "id": "stream-test",
+            "model": "test-model",
+            "usage": {
+              "input_tokens": 4,
+              "output_tokens": 2,
+              "total_tokens": 6
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "multiple-events-one-read",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IkhlbGxvICJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV0sImlkIjoic3RyZWFtLXRlc3QiLCJtb2RlbCI6InRlc3QtbW9kZWwifQoKZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IuS4lueVjCJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV19CgpkYXRhOiB7ImNob2ljZXMiOlt7ImluZGV4IjowLCJkZWx0YSI6e30sImZpbmlzaF9yZWFzb24iOiJzdG9wIn1dfQoKZGF0YTogeyJjaG9pY2VzIjpbXSwidXNhZ2UiOnsicHJvbXB0X3Rva2VucyI6NCwiY29tcGxldGlvbl90b2tlbnMiOjIsInRvdGFsX3Rva2VucyI6Nn19CgpkYXRhOiBbRE9ORV0KCg=="
+        ]
+      }
+    },
+    "expected": {
+      "events": [
+        {
+          "type": "start",
+          "id": "stream-test",
+          "model": "test-model"
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "Hello "
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "世界"
+        },
+        {
+          "type": "usage",
+          "usage": {
+            "input_tokens": 4,
+            "output_tokens": 2,
+            "total_tokens": 6
+          }
+        },
+        {
+          "type": "done",
+          "response": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Hello 世界"
+              }
+            ],
+            "finish_reason": "stop",
+            "provider_metadata": {
+              "finish_reason": "stop",
+              "request_id": "stream-request"
+            },
+            "id": "stream-test",
+            "model": "test-model",
+            "usage": {
+              "input_tokens": 4,
+              "output_tokens": 2,
+              "total_tokens": 6
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "every-event-split",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGE=",
+          "dGE6IHsiY2hvaWNlcyI6W3s=",
+          "ImluZGV4IjowLCJkZWx0YSI6eyJjb250ZW50IjoiSGVsbG8gIn0sImZpbmlzaF9yZWFzb24iOm51bGx9XSwiaWQiOiJzdHJlYW0tdGVzdCIsIm1vZGVsIjoidGVzdC1tb2RlbCJ9Cg==",
+          "Cg==",
+          "ZGE=",
+          "dGE6IHsiY2hvaWNlcyI6W3s=",
+          "ImluZGV4IjowLCJkZWx0YSI6eyJjb250ZW50Ijoi5LiW55WMIn0sImZpbmlzaF9yZWFzb24iOm51bGx9XX0K",
+          "Cg==",
+          "ZGE=",
+          "dGE6IHsiY2hvaWNlcyI6W3s=",
+          "ImluZGV4IjowLCJkZWx0YSI6e30sImZpbmlzaF9yZWFzb24iOiJzdG9wIn1dfQo=",
+          "Cg==",
+          "ZGE=",
+          "dGE6IHsiY2hvaWNlcyI6W10=",
+          "LCJ1c2FnZSI6eyJwcm9tcHRfdG9rZW5zIjo0LCJjb21wbGV0aW9uX3Rva2VucyI6MiwidG90YWxfdG9rZW5zIjo2fX0K",
+          "Cg==",
+          "ZGE=",
+          "dGE6IFtET05FXQoK",
+          "Cg=="
+        ]
+      }
+    },
+    "expected": {
+      "events": [
+        {
+          "type": "start",
+          "id": "stream-test",
+          "model": "test-model"
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "Hello "
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "世界"
+        },
+        {
+          "type": "usage",
+          "usage": {
+            "input_tokens": 4,
+            "output_tokens": 2,
+            "total_tokens": 6
+          }
+        },
+        {
+          "type": "done",
+          "response": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Hello 世界"
+              }
+            ],
+            "finish_reason": "stop",
+            "provider_metadata": {
+              "finish_reason": "stop",
+              "request_id": "stream-request"
+            },
+            "id": "stream-test",
+            "model": "test-model",
+            "usage": {
+              "input_tokens": 4,
+              "output_tokens": 2,
+              "total_tokens": 6
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "crlf",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IkhlbGxvICJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV0sImlkIjoic3RyZWFtLXRlc3QiLCJtb2RlbCI6InRlc3QtbW9kZWwifQ0KDQpkYXRhOiB7ImNob2ljZXMiOlt7ImluZGV4IjowLCJkZWx0YSI6eyJjb250ZW50Ijoi5LiW55WMIn0sImZpbmlzaF9yZWFzb24iOm51bGx9XX0NCg0KZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnt9LCJmaW5pc2hfcmVhc29uIjoic3RvcCJ9XX0NCg0KZGF0YTogeyJjaG9pY2VzIjpbXSwidXNhZ2UiOnsicHJvbXB0X3Rva2VucyI6NCwiY29tcGxldGlvbl90b2tlbnMiOjIsInRvdGFsX3Rva2VucyI6Nn19DQoNCmRhdGE6IFtET05FXQ0KDQo="
+        ]
+      }
+    },
+    "expected": {
+      "events": [
+        {
+          "type": "start",
+          "id": "stream-test",
+          "model": "test-model"
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "Hello "
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "世界"
+        },
+        {
+          "type": "usage",
+          "usage": {
+            "input_tokens": 4,
+            "output_tokens": 2,
+            "total_tokens": 6
+          }
+        },
+        {
+          "type": "done",
+          "response": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Hello 世界"
+              }
+            ],
+            "finish_reason": "stop",
+            "provider_metadata": {
+              "finish_reason": "stop",
+              "request_id": "stream-request"
+            },
+            "id": "stream-test",
+            "model": "test-model",
+            "usage": {
+              "input_tokens": 4,
+              "output_tokens": 2,
+              "total_tokens": 6
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "utf8-split",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IkhlbGxvICJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV0sImlkIjoic3RyZWFtLXRlc3QiLCJtb2RlbCI6InRlc3QtbW9kZWwifQoK",
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IuQ=",
+          "uA==",
+          "lueVjCJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV19Cgo=",
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnt9LCJmaW5pc2hfcmVhc29uIjoic3RvcCJ9XX0KCg==",
+          "ZGF0YTogeyJjaG9pY2VzIjpbXSwidXNhZ2UiOnsicHJvbXB0X3Rva2VucyI6NCwiY29tcGxldGlvbl90b2tlbnMiOjIsInRvdGFsX3Rva2VucyI6Nn19Cgo=",
+          "ZGF0YTogW0RPTkVdCgo="
+        ]
+      }
+    },
+    "expected": {
+      "events": [
+        {
+          "type": "start",
+          "id": "stream-test",
+          "model": "test-model"
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "Hello "
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "世界"
+        },
+        {
+          "type": "usage",
+          "usage": {
+            "input_tokens": 4,
+            "output_tokens": 2,
+            "total_tokens": 6
+          }
+        },
+        {
+          "type": "done",
+          "response": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Hello 世界"
+              }
+            ],
+            "finish_reason": "stop",
+            "provider_metadata": {
+              "finish_reason": "stop",
+              "request_id": "stream-request"
+            },
+            "id": "stream-test",
+            "model": "test-model",
+            "usage": {
+              "input_tokens": 4,
+              "output_tokens": 2,
+              "total_tokens": 6
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "done-marker-split",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IkhlbGxvICJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV0sImlkIjoic3RyZWFtLXRlc3QiLCJtb2RlbCI6InRlc3QtbW9kZWwifQoK",
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IuS4lueVjCJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV19Cgo=",
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnt9LCJmaW5pc2hfcmVhc29uIjoic3RvcCJ9XX0KCg==",
+          "ZGF0YTogeyJjaG9pY2VzIjpbXSwidXNhZ2UiOnsicHJvbXB0X3Rva2VucyI6NCwiY29tcGxldGlvbl90b2tlbnMiOjIsInRvdGFsX3Rva2VucyI6Nn19Cgo=",
+          "ZGF0YTogW0RP",
+          "TkVdCg==",
+          "Cg=="
+        ]
+      }
+    },
+    "expected": {
+      "events": [
+        {
+          "type": "start",
+          "id": "stream-test",
+          "model": "test-model"
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "Hello "
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "世界"
+        },
+        {
+          "type": "usage",
+          "usage": {
+            "input_tokens": 4,
+            "output_tokens": 2,
+            "total_tokens": 6
+          }
+        },
+        {
+          "type": "done",
+          "response": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Hello 世界"
+              }
+            ],
+            "finish_reason": "stop",
+            "provider_metadata": {
+              "finish_reason": "stop",
+              "request_id": "stream-request"
+            },
+            "id": "stream-test",
+            "model": "test-model",
+            "usage": {
+              "input_tokens": 4,
+              "output_tokens": 2,
+              "total_tokens": 6
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "multiline-comments-bom-cr",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "77u/OiBrZWVwYWxpdmUNaWQ6IHVudXNlZA1ldmVudDogbWVzc2FnZQ1yZXRyeTogMTAwMA14LWZpZWxkOiBpZ25vcmVkDWRhdGE6IHsiaWQiOiJzdHJlYW0tdGVzdCIsIm1vZGVsIjoidGVzdC1tb2RlbCIsDWRhdGE6ICJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IkhlbGxvICIsInJvbGUiOiJhc3Npc3RhbnQifSwiZmluaXNoX3JlYXNvbiI6bnVsbH1dfQ0N",
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IuS4lueVjCJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV19Cgo=",
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnt9LCJmaW5pc2hfcmVhc29uIjoic3RvcCJ9XX0KCg==",
+          "ZGF0YTogeyJjaG9pY2VzIjpbXSwidXNhZ2UiOnsicHJvbXB0X3Rva2VucyI6NCwiY29tcGxldGlvbl90b2tlbnMiOjIsInRvdGFsX3Rva2VucyI6Nn19Cgo=",
+          "ZGF0YTogW0RPTkVdCgo="
+        ]
+      }
+    },
+    "expected": {
+      "events": [
+        {
+          "type": "start",
+          "id": "stream-test",
+          "model": "test-model"
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "Hello "
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "世界"
+        },
+        {
+          "type": "usage",
+          "usage": {
+            "input_tokens": 4,
+            "output_tokens": 2,
+            "total_tokens": 6
+          }
+        },
+        {
+          "type": "done",
+          "response": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Hello 世界"
+              }
+            ],
+            "finish_reason": "stop",
+            "provider_metadata": {
+              "finish_reason": "stop",
+              "request_id": "stream-request"
+            },
+            "id": "stream-test",
+            "model": "test-model",
+            "usage": {
+              "input_tokens": 4,
+              "output_tokens": 2,
+              "total_tokens": 6
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "missing-usage",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IkhlbGxvICJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV0sImlkIjoic3RyZWFtLXRlc3QiLCJtb2RlbCI6InRlc3QtbW9kZWwifQoK",
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IuS4lueVjCJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV19Cgo=",
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnt9LCJmaW5pc2hfcmVhc29uIjoic3RvcCJ9XX0KCg==",
+          "ZGF0YTogW0RPTkVdCgo="
+        ]
+      }
+    },
+    "expected": {
+      "events": [
+        {
+          "type": "start",
+          "id": "stream-test",
+          "model": "test-model"
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "Hello "
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "世界"
+        },
+        {
+          "type": "done",
+          "response": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Hello 世界"
+              }
+            ],
+            "finish_reason": "stop",
+            "provider_metadata": {
+              "finish_reason": "stop",
+              "request_id": "stream-request"
+            },
+            "id": "stream-test",
+            "model": "test-model"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "unknown-finish",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IkhlbGxvICJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV0sImlkIjoic3RyZWFtLXRlc3QiLCJtb2RlbCI6InRlc3QtbW9kZWwifQoK",
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnt9LCJmaW5pc2hfcmVhc29uIjoiZnV0dXJlX3JlYXNvbiJ9XX0KCg==",
+          "ZGF0YTogW0RPTkVdCgo="
+        ]
+      }
+    },
+    "expected": {
+      "events": [
+        {
+          "type": "start",
+          "id": "stream-test",
+          "model": "test-model"
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "Hello "
+        },
+        {
+          "type": "done",
+          "response": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Hello "
+              }
+            ],
+            "finish_reason": "other",
+            "provider_metadata": {
+              "finish_reason": "future_reason",
+              "request_id": "stream-request"
+            },
+            "id": "stream-test",
+            "model": "test-model"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "partial-usage-snapshots",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IkhlbGxvICJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV0sImlkIjoic3RyZWFtLXRlc3QiLCJtb2RlbCI6InRlc3QtbW9kZWwifQoK",
+          "ZGF0YTogeyJjaG9pY2VzIjpbXSwidXNhZ2UiOnsicHJvbXB0X3Rva2VucyI6MH19Cgo=",
+          "ZGF0YTogeyJjaG9pY2VzIjpbXSwidXNhZ2UiOnsiY29tcGxldGlvbl90b2tlbnMiOjJ9fQoK",
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnt9LCJmaW5pc2hfcmVhc29uIjoic3RvcCJ9XX0KCg==",
+          "ZGF0YTogW0RPTkVdCgo="
+        ]
+      }
+    },
+    "expected": {
+      "events": [
+        {
+          "type": "start",
+          "id": "stream-test",
+          "model": "test-model"
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "Hello "
+        },
+        {
+          "type": "usage",
+          "usage": {
+            "input_tokens": 0
+          }
+        },
+        {
+          "type": "usage",
+          "usage": {
+            "input_tokens": 0,
+            "output_tokens": 2
+          }
+        },
+        {
+          "type": "done",
+          "response": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Hello "
+              }
+            ],
+            "finish_reason": "stop",
+            "provider_metadata": {
+              "finish_reason": "stop",
+              "request_id": "stream-request"
+            },
+            "id": "stream-test",
+            "model": "test-model",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 2
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "empty-text",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsicm9sZSI6ImFzc2lzdGFudCIsImNvbnRlbnQiOiIifSwiZmluaXNoX3JlYXNvbiI6bnVsbH1dLCJ1c2FnZSI6bnVsbH0KCg==",
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnt9LCJmaW5pc2hfcmVhc29uIjoic3RvcCJ9XX0KCg==",
+          "ZGF0YTogW0RPTkVdCgo="
+        ]
+      }
+    },
+    "expected": {
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "done",
+          "response": {
+            "content": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "finish_reason": "stop",
+            "provider_metadata": {
+              "finish_reason": "stop",
+              "request_id": "stream-request"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "filtered-no-text",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsicm9sZSI6ImFzc2lzdGFudCIsImNvbnRlbnQiOiIifSwiZmluaXNoX3JlYXNvbiI6bnVsbH1dfQoK",
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnt9LCJmaW5pc2hfcmVhc29uIjoiY29udGVudF9maWx0ZXIifV19Cgo=",
+          "ZGF0YTogW0RPTkVdCgo="
+        ]
+      }
+    },
+    "expected": {
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "done",
+          "response": {
+            "content": [],
+            "finish_reason": "content_filter",
+            "provider_metadata": {
+              "finish_reason": "content_filter",
+              "request_id": "stream-request"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "abrupt-eof",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IkhlbGxvICJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV0sImlkIjoic3RyZWFtLXRlc3QiLCJtb2RlbCI6InRlc3QtbW9kZWwifQoK"
+        ]
+      }
+    },
+    "expected": {
+      "events": [
+        {
+          "type": "start",
+          "id": "stream-test",
+          "model": "test-model"
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "Hello "
+        }
+      ],
+      "error": {
+        "category": "ProtocolError"
+      }
+    }
+  },
+  {
+    "id": "finish-without-done",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IkhlbGxvICJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV0sImlkIjoic3RyZWFtLXRlc3QiLCJtb2RlbCI6InRlc3QtbW9kZWwifQoK",
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IuS4lueVjCJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV19Cgo=",
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnt9LCJmaW5pc2hfcmVhc29uIjoic3RvcCJ9XX0KCg=="
+        ]
+      }
+    },
+    "expected": {
+      "events": [
+        {
+          "type": "start",
+          "id": "stream-test",
+          "model": "test-model"
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "Hello "
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "世界"
+        }
+      ],
+      "error": {
+        "category": "ProtocolError"
+      }
+    }
+  },
+  {
+    "id": "done-without-finish",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IkhlbGxvICJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV0sImlkIjoic3RyZWFtLXRlc3QiLCJtb2RlbCI6InRlc3QtbW9kZWwifQoK",
+          "ZGF0YTogW0RPTkVdCgo="
+        ]
+      }
+    },
+    "expected": {
+      "events": [
+        {
+          "type": "start",
+          "id": "stream-test",
+          "model": "test-model"
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "Hello "
+        }
+      ],
+      "error": {
+        "category": "ProtocolError"
+      }
+    }
+  },
+  {
+    "id": "done-only",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGF0YTogW0RPTkVdCgo="
+        ]
+      }
+    },
+    "expected": {
+      "events": [],
+      "error": {
+        "category": "ProtocolError"
+      }
+    }
+  },
+  {
+    "id": "unterminated-done",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IkhlbGxvICJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV0sImlkIjoic3RyZWFtLXRlc3QiLCJtb2RlbCI6InRlc3QtbW9kZWwifQoK",
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IuS4lueVjCJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV19Cgo=",
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnt9LCJmaW5pc2hfcmVhc29uIjoic3RvcCJ9XX0KCg==",
+          "ZGF0YTogW0RPTkVdCg=="
+        ]
+      }
+    },
+    "expected": {
+      "events": [
+        {
+          "type": "start",
+          "id": "stream-test",
+          "model": "test-model"
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "Hello "
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "世界"
+        }
+      ],
+      "error": {
+        "category": "ProtocolError"
+      }
+    }
+  },
+  {
+    "id": "malformed-json",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IkhlbGxvICJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV0sImlkIjoic3RyZWFtLXRlc3QiLCJtb2RlbCI6InRlc3QtbW9kZWwifQoK",
+          "ZGF0YToge2Jyb2tlbgoK"
+        ]
+      }
+    },
+    "expected": {
+      "events": [
+        {
+          "type": "start",
+          "id": "stream-test",
+          "model": "test-model"
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "Hello "
+        }
+      ],
+      "error": {
+        "category": "ProtocolError"
+      }
+    }
+  },
+  {
+    "id": "malformed-choice",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGF0YTogeyJjaG9pY2VzIjpbe31dfQoK"
+        ]
+      }
+    },
+    "expected": {
+      "events": [],
+      "error": {
+        "category": "ProtocolError"
+      }
+    }
+  },
+  {
+    "id": "multiple-choices",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsiY29udGVudCI6IkhlbGxvICJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfSx7ImluZGV4IjowLCJkZWx0YSI6eyJjb250ZW50IjoiSGVsbG8gIn0sImZpbmlzaF9yZWFzb24iOm51bGx9XX0KCg=="
+        ]
+      }
+    },
+    "expected": {
+      "events": [],
+      "error": {
+        "category": "ProtocolError"
+      }
+    }
+  },
+  {
+    "id": "unexpected-tools",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGF0YTogeyJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsidG9vbF9jYWxscyI6W3siaWQiOiJjYWxsLXRlc3QifV19LCJmaW5pc2hfcmVhc29uIjpudWxsfV0sInRvb2wiOiJ1bnVzZWQifQoK"
+        ]
+      }
+    },
+    "expected": {
+      "events": [],
+      "error": {
+        "category": "ProtocolError"
+      }
+    }
+  },
+  {
+    "id": "invalid-utf8",
+    "driver": "openai-compatible",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "stream-request"
+        },
+        "fragments_base64": [
+          "ZGF0YTogeyJjaG9pY2VzIjogIv8ifQoK"
+        ]
+      }
+    },
+    "expected": {
+      "events": [],
+      "error": {
+        "category": "ProtocolError"
+      }
+    }
+  }
+]

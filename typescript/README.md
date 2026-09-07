@@ -51,10 +51,10 @@ console.log(response.text);
 
 Runtime exports: `connect`, `ConduitError`. Type exports: `ClientConfig`, `Client`,
 `Model`, `Message`, `TextPart`, `JsonValue`, `GenerationRequest`,
-`GenerationResponse`, `Usage`, `ErrorCode`, `ErrorDetails`.
+`GenerationResponse`, `StreamEvent`, `Usage`, `ErrorCode`, `ErrorDetails`.
 
-Clients expose only `.model(id)`; selected models expose only `.generate(request)`.
-Construction/selection performs no I/O. No listModels, stream, capabilities,
+Clients expose `.model(id)`; selected models expose `.generate(request)` and
+`.stream(request)`. Construction/selection performs no I/O. No listModels, capabilities,
 tools, structured-output, image, or reasoning API is implemented. Unsupported
 common feature requests fail explicitly; unknown fields are invalid requests.
 
@@ -65,7 +65,8 @@ Userinfo, query, and fragment are rejected. No provider autodetection or redirec
 
 Messages support system/user/assistant with strings or ordered text-part arrays.
 Strings become one text part on the wire. Parameters map to `max_tokens`,
-`temperature`, `top_p`, and `stop`; `stream` is always false. Token budgets are
+`temperature`, `top_p`, and `stop`; the owned `stream` flag is false for generate
+and true for stream. Token budgets are
 positive safe integers, temperature is 0–2, topP is 0–1, stop is a string array.
 Omitted sampling fields stay omitted. The driver makes exactly one HTTP request.
 
@@ -115,6 +116,9 @@ option is omitted or equal. Reserved fields:
 `model`, `messages`, `stream`, `stream_options`, `max_tokens`,
 `max_completion_tokens`, `temperature`, `top_p`, `stop`, `tools`, `tool_choice`,
 `functions`, `function_call`, `response_format`, `n`, `modalities`.
+Exception: stream_options is allowed as a JSON object only for stream(), such as
+`providerOptions: { stream_options: { include_usage: true } }`. Nothing is injected
+automatically; generate() continues to reject stream_options.
 
 Credentials are optional nonempty bearer-token strings captured privately, used
 only for authorization. Custom headers cannot set authorization, proxy
@@ -129,3 +133,60 @@ objects and application logging remain the caller's responsibility.
 The [runnable example](../examples/typescript/generate.mjs) uses the compiled
 package directly. Set CONDUIT_ENDPOINT and optionally CONDUIT_MODEL and
 CONDUIT_API_KEY; run `node examples/typescript/generate.mjs` after building.
+
+## Text streaming
+
+```ts
+for await (const event of model.stream({
+  messages: [{ role: "user", content: "Hello" }],
+  timeout: 10000,
+})) {
+  if (event.type === "text_delta") process.stdout.write(event.text);
+  if (event.type === "done") console.log(event.response.usage);
+}
+```
+
+`stream(request): AsyncGenerator<StreamEvent>` requires no extra await. Validation,
+fetch, and the operation timeout start on first iteration. Events:
+
+| Type | Fields |
+| --- | --- |
+| start | Optional id/model known at the first valid choice |
+| text_delta | index: 0, nonempty text |
+| usage | Cumulative normalized usage snapshot; missing fields remain absent |
+| done | response: the same GenerationResponse used by generate() |
+
+Exactly one start/done on success. IDs/model first reported later appear in done;
+metadata holds only raw finish reason and request ID, never a chunk history.
+Final text is accumulated once; response.text remains a view over content.
+Concatenated text deltas agree with final text. Only possible secret prefixes
+are delayed for redaction across provider deltas; ordinary text is not retokenized.
+
+Successful completion requires a valid single-choice stream, a string finish
+reason, and a blank-line-terminated `[DONE]` event. A finish reason alone or EOF
+alone fails with ProtocolError. LF/CRLF/CR, multiline data, comments, BOM, and
+split UTF-8/JSON/SSE bytes are handled incrementally. Incomplete final SSE records
+are discarded, not treated as completed events. Invalid UTF-8/JSON, conflicting
+IDs/models, nonzero/multiple choices, text after finish, and meaningful tool or
+other non-text deltas are ProtocolError. HTTP 200 still requires a valid event
+stream. In-band JSON error envelopes raise ProviderError with safe diagnostics.
+
+Timeout covers the whole stream, including consumer pauses; expiry after partial
+output throws TimeoutError, without done. Caller AbortSignal produces
+CancelledError; first abort wins. Body/network failures produce ConnectionError.
+HTTP errors before events use the same mappings as generate(). No retry/reconnect.
+
+`break` in for-await (or returning the iterator) cancels the reader and releases
+resources silently. Timers/listeners/readers are cleaned up before yielding done,
+so consuming another event is unnecessary. Native generator return queues behind
+an outstanding next; use AbortSignal to interrupt that read. A dropped iterator
+cannot be detected automatically: close it or supply a cancellation signal.
+
+Buffering is limited to the current read/incomplete SSE event, bounded secret
+prefixes, and accumulated final text. There is no background queue or raw event
+log. A single unterminated event can grow until termination/cancellation; no
+arbitrary provider payload-size limit is imposed in this slice.
+
+Run the [streaming example](../examples/typescript/stream.mjs) after building:
+`CONDUIT_ENDPOINT=http://localhost:1234/v1 CONDUIT_MODEL=my-model node examples/typescript/stream.mjs`.
+The test suite runs both examples locally and replays shared fragmentation cases.
