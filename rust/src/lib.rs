@@ -797,19 +797,18 @@ fn encode_openai_request(
             } else {
                 let mut obj = serde_json::Map::new();
                 obj.insert("role".to_string(), Value::String(m.role.clone()));
-                let content_arr: Vec<Value> = m
+                let texts: String = m
                     .content
                     .iter()
                     .filter_map(|p| {
                         if let ContentPart::Text(t) = p {
-                            Some(serde_json::json!({"type":"text","text":t.text}))
+                            Some(t.text.clone())
                         } else {
                             None
                         }
                     })
                     .collect();
-                // For single text, keep as array to match TS/Python (they preserve array)
-                obj.insert("content".to_string(), Value::Array(content_arr));
+                obj.insert("content".to_string(), Value::String(texts));
                 msgs.push(Value::Object(obj));
             }
         }

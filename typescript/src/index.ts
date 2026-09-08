@@ -189,7 +189,7 @@ function encode(model: string, request: GenerationRequest | string, streaming: b
   if (Object.keys(normalized).some(key => unsupportedFields.has(key))) {
     throw new ConduitError("UnsupportedCapabilityError", streaming ? "Only text streaming is implemented." : "Only non-streaming text generation is implemented.");
   }
-  keys(request, requestFields);
+  keys(normalized, requestFields);
   if (!Array.isArray(normalized.messages) || normalized.messages.length === 0) invalid("messages must be a nonempty array.");
   validateTools(normalized.tools);
   validateToolChoice(normalized.toolChoice, normalized.tools as readonly unknown[] | undefined);
@@ -293,7 +293,7 @@ function encode(model: string, request: GenerationRequest | string, streaming: b
     return anthropicRequest(model, messages as { role: string; content: unknown[] }[], normalized, streaming, wireTools, wireToolChoice);
   }
   if (driver === "gemini") {
-    return geminiRequest(messages as { role: string; content: unknown[] }[], request, wireTools, wireToolChoice, wireFormat);
+    return geminiRequest(messages as { role: string; content: unknown[] }[], normalized, wireTools, wireToolChoice, wireFormat);
   }
   // OpenAI-compatible wire: map tool messages and tool calls
   const wireMessages = messages.map(m => {
