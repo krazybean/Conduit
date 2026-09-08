@@ -1,0 +1,324 @@
+[
+  {
+    "id": "text",
+    "driver": "anthropic",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "request-id": "req_anthropic_1"
+        },
+        "body": {
+          "id": "msg_01Test",
+          "type": "message",
+          "role": "assistant",
+          "model": "claude-sonnet-4-20250514",
+          "content": [
+            {
+              "type": "text",
+              "text": "Hello!"
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "usage": {
+            "input_tokens": 4,
+            "output_tokens": 2
+          }
+        }
+      }
+    },
+    "expected": {
+      "response": {
+        "id": "msg_01Test",
+        "model": "claude-sonnet-4-20250514",
+        "content": [
+          {
+            "type": "text",
+            "text": "Hello!"
+          }
+        ],
+        "finish_reason": "stop",
+        "provider_metadata": {
+          "finish_reason": "end_turn",
+          "request_id": "req_anthropic_1"
+        },
+        "usage": {
+          "input_tokens": 4,
+          "output_tokens": 2
+        }
+      }
+    }
+  },
+  {
+    "id": "tool-use",
+    "driver": "anthropic",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "id": "msg_02Tool",
+          "type": "message",
+          "role": "assistant",
+          "model": "claude-sonnet-4-20250514",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "toolu_01ABC",
+              "name": "get_weather",
+              "input": {
+                "location": "Paris"
+              }
+            }
+          ],
+          "stop_reason": "tool_use",
+          "stop_sequence": null,
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5
+          }
+        }
+      }
+    },
+    "expected": {
+      "response": {
+        "id": "msg_02Tool",
+        "model": "claude-sonnet-4-20250514",
+        "content": [
+          {
+            "type": "tool_call",
+            "id": "toolu_01ABC",
+            "name": "get_weather",
+            "arguments": {
+              "location": "Paris"
+            }
+          }
+        ],
+        "finish_reason": "tool_call",
+        "provider_metadata": {
+          "finish_reason": "tool_use"
+        },
+        "usage": {
+          "input_tokens": 10,
+          "output_tokens": 5
+        }
+      }
+    }
+  },
+  {
+    "id": "text-and-tool",
+    "driver": "anthropic",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "id": "msg_03Mixed",
+          "type": "message",
+          "role": "assistant",
+          "model": "claude-sonnet-4-20250514",
+          "content": [
+            {
+              "type": "text",
+              "text": "Let me check."
+            },
+            {
+              "type": "tool_use",
+              "id": "toolu_02DEF",
+              "name": "get_weather",
+              "input": {
+                "location": "Berlin"
+              }
+            }
+          ],
+          "stop_reason": "tool_use",
+          "stop_sequence": null,
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 6
+          }
+        }
+      }
+    },
+    "expected": {
+      "response": {
+        "id": "msg_03Mixed",
+        "model": "claude-sonnet-4-20250514",
+        "content": [
+          {
+            "type": "text",
+            "text": "Let me check."
+          },
+          {
+            "type": "tool_call",
+            "id": "toolu_02DEF",
+            "name": "get_weather",
+            "arguments": {
+              "location": "Berlin"
+            }
+          }
+        ],
+        "finish_reason": "tool_call",
+        "provider_metadata": {
+          "finish_reason": "tool_use"
+        },
+        "usage": {
+          "input_tokens": 12,
+          "output_tokens": 6
+        }
+      }
+    }
+  },
+  {
+    "id": "max-tokens",
+    "driver": "anthropic",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "id": "msg_04",
+          "type": "message",
+          "role": "assistant",
+          "model": "claude-sonnet-4-20250514",
+          "content": [
+            {
+              "type": "text",
+              "text": "Long"
+            }
+          ],
+          "stop_reason": "max_tokens",
+          "stop_sequence": null,
+          "usage": {
+            "input_tokens": 5,
+            "output_tokens": 50
+          }
+        }
+      }
+    },
+    "expected": {
+      "response": {
+        "id": "msg_04",
+        "model": "claude-sonnet-4-20250514",
+        "content": [
+          {
+            "type": "text",
+            "text": "Long"
+          }
+        ],
+        "finish_reason": "length",
+        "provider_metadata": {
+          "finish_reason": "max_tokens"
+        },
+        "usage": {
+          "input_tokens": 5,
+          "output_tokens": 50
+        }
+      }
+    }
+  },
+  {
+    "id": "stop-sequence",
+    "driver": "anthropic",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "id": "msg_05",
+          "type": "message",
+          "role": "assistant",
+          "model": "claude-sonnet-4-20250514",
+          "content": [
+            {
+              "type": "text",
+              "text": "Hello"
+            }
+          ],
+          "stop_reason": "stop_sequence",
+          "stop_sequence": "END",
+          "usage": {
+            "input_tokens": 3,
+            "output_tokens": 3
+          }
+        }
+      }
+    },
+    "expected": {
+      "response": {
+        "id": "msg_05",
+        "model": "claude-sonnet-4-20250514",
+        "content": [
+          {
+            "type": "text",
+            "text": "Hello"
+          }
+        ],
+        "finish_reason": "stop",
+        "provider_metadata": {
+          "finish_reason": "stop_sequence",
+          "stop_sequence": "END"
+        },
+        "usage": {
+          "input_tokens": 3,
+          "output_tokens": 3
+        }
+      }
+    }
+  },
+  {
+    "id": "refusal",
+    "driver": "anthropic",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "id": "msg_06",
+          "type": "message",
+          "role": "assistant",
+          "model": "claude-sonnet-4-20250514",
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ],
+          "stop_reason": "refusal",
+          "stop_sequence": null,
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1
+          }
+        }
+      }
+    },
+    "expected": {
+      "response": {
+        "id": "msg_06",
+        "model": "claude-sonnet-4-20250514",
+        "content": [
+          {
+            "type": "text",
+            "text": ""
+          }
+        ],
+        "finish_reason": "content_filter",
+        "provider_metadata": {
+          "finish_reason": "refusal"
+        },
+        "usage": {
+          "input_tokens": 2,
+          "output_tokens": 1
+        }
+      }
+    }
+  }
+]

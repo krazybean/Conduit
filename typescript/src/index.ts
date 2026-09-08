@@ -2,6 +2,7 @@ import { decode, httpError } from "./openai-response.js";
 import { object } from "./response.js";
 import { ollamaRequest, ollamaResponse, ollamaError, ollamaStream } from "./ollama.js";
 import { openaiStream } from "./openai-stream.js";
+import { anthropicRequest, anthropicResponse, anthropicError, anthropicStream } from "./anthropic.js";
 import { ConduitError } from "./errors.js";
 import type { Client, ClientConfig, GenerationRequest, GenerationResponse, JsonValue, ListModelsOptions, Model, ModelInfo, StreamEvent } from "./types.js";
 
@@ -17,6 +18,7 @@ const ownedFields = new Set([
 const protectedHeaders = new Set([
   "authorization", "proxy-authorization", "cookie", "host", "content-type", "content-length",
   "connection", "transfer-encoding", "upgrade", "trailer", "te", "keep-alive",
+  "x-api-key", "anthropic-version",
 ]);
 const requestFields = new Set([
   "messages", "maxOutputTokens", "temperature", "topP", "stop", "tools", "toolChoice", "responseFormat", "providerOptions", "signal", "timeout",
@@ -109,8 +111,16 @@ function encodeTools(tools: readonly import("./types.js").ToolDefinition[] | und
   }));
 }
 
-function encodeToolChoice(choice: unknown): unknown {
+function encodeToolChoice(choice: unknown, driver?: ClientConfig["driver"]): unknown {
   if (choice === undefined) return undefined;
+  if (driver === "anthropic") {
+    if (choice === "auto") return { type: "auto" };
+    if (choice === "none") return { type: "none" };
+    if (choice === "required") return { type: "any" };
+    if (typeof choice === "string") return { type: "tool", name: choice };
+    if (object(choice) && typeof choice.name === "string") return { type: "tool", name: choice.name };
+    return choice;
+  }
   if (typeof choice === "string") {
     if (["auto", "none", "required"].includes(choice)) return choice;
     return { type: "function", function: { name: choice } };
@@ -119,6 +129,15 @@ function encodeToolChoice(choice: unknown): unknown {
     return { type: "function", function: { name: choice.name } };
   }
   return choice;
+}
+
+function encodeToolsAnthropic(tools: readonly import("./types.js").ToolDefinition[] | undefined): unknown[] | undefined {
+  if (tools === undefined) return undefined;
+  return tools.map(t => ({
+    name: t.name,
+    ...(t.description !== undefined && { description: t.description }),
+    input_schema: t.inputSchema,
+  }));
 }
 
 function validateResponseFormat(value: unknown): void {
@@ -226,28 +245,40 @@ function encode(model: string, request: GenerationRequest, streaming: boolean, d
     return { role, content };
   });
   const { maxOutputTokens, temperature, topP, stop, providerOptions, tools, toolChoice, responseFormat } = request;
-  if (maxOutputTokens !== undefined && (!Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1)) invalid("maxOutputTokens must be a positive safe integer.");
-  if (temperature !== undefined && (!Number.isFinite(temperature) || temperature < 0 || (driver === "openai-compatible" && temperature > 2))) invalid(driver === "ollama" ? "temperature must be finite and nonnegative." : "temperature must be between 0 and 2.");
+  if (maxOutputTokens !== undefined && (!Number.isSafeInteger(maxOutputTokens) || (driver === "anthropic" ? maxOutputTokens < 0 : maxOutputTokens < 1))) {
+    invalid(driver === "anthropic" ? "maxOutputTokens must be a nonnegative safe integer." : "maxOutputTokens must be a positive safe integer.");
+  }
+  if (temperature !== undefined && (!Number.isFinite(temperature) || temperature < 0 || (driver === "openai-compatible" && temperature > 2) || (driver === "anthropic" && temperature > 1))) {
+    if (driver === "anthropic") invalid("temperature must be between 0 and 1.");
+    invalid(driver === "ollama" ? "temperature must be finite and nonnegative." : "temperature must be between 0 and 2.");
+  }
   if (topP !== undefined && (!Number.isFinite(topP) || topP < 0 || topP > 1)) invalid("topP must be between 0 and 1.");
   if (stop !== undefined && (!Array.isArray(stop) || Array.from(stop).some(value => typeof value !== "string"))) invalid("stop must be an array of strings.");
   if (providerOptions !== undefined) {
     if (!object(providerOptions)) invalid("providerOptions must be an object.");
     if (driver === "openai-compatible" && Object.keys(providerOptions).some(key => ownedFields.has(key) && !(streaming && key === "stream_options"))) invalid("providerOptions conflicts with a Conduit-owned field.");
     if (driver === "openai-compatible" && streaming && providerOptions.stream_options !== undefined && !object(providerOptions.stream_options)) invalid("stream_options must be a JSON object.");
+    // Anthropic collisions handled in anthropicRequest; generic JSON check still applies
     try { json(providerOptions); } catch (error) {
       if (error instanceof ConduitError) throw error;
       invalid("providerOptions must contain plain JSON data.");
     }
   }
   // If tools were provided, ensure providerOptions does not also contain raw tools (already reserved), but allow passthrough of native extras
-  const wireTools = encodeTools(tools as import("./types.js").ToolDefinition[] | undefined);
-  const wireToolChoice = encodeToolChoice(toolChoice);
-  const wireFormat = encodeResponseFormat(responseFormat, driver);
+  if (driver === "anthropic" && responseFormat !== undefined) {
+    throw new ConduitError("UnsupportedCapabilityError", "responseFormat is not supported for Anthropic.");
+  }
+  const wireTools = driver === "anthropic" ? encodeToolsAnthropic(tools as import("./types.js").ToolDefinition[] | undefined) : encodeTools(tools as import("./types.js").ToolDefinition[] | undefined);
+  const wireToolChoice = encodeToolChoice(toolChoice, driver);
+  const wireFormat = driver === "anthropic" ? undefined : encodeResponseFormat(responseFormat, driver);
   if (driver === "ollama") {
     if (wireToolChoice !== undefined) {
       throw new ConduitError("UnsupportedCapabilityError", "toolChoice is not supported for Ollama; omit toolChoice or use providerOptions for native fields.");
     }
     return ollamaRequest(model, messages as { role: unknown; content: unknown[] }[], request, streaming, wireTools, undefined, wireFormat);
+  }
+  if (driver === "anthropic") {
+    return anthropicRequest(model, messages as { role: string; content: unknown[] }[], request, streaming, wireTools, wireToolChoice);
   }
   // OpenAI-compatible wire: map tool messages and tool calls
   const wireMessages = messages.map(m => {
@@ -290,7 +321,7 @@ export function connect(config: ClientConfig): Client;
 export function connect(config: ClientConfig & { model?: string }): Client | Model {
   if (!object(config)) invalid("Client configuration is required.");
   keys(config, new Set(["driver", "endpoint", "credentials", "headers", "timeout", "model"]));
-  if (config.driver !== "openai-compatible" && config.driver !== "ollama") invalid("Unknown driver.");
+  if (config.driver !== "openai-compatible" && config.driver !== "ollama" && config.driver !== "anthropic") invalid("Unknown driver.");
   const driver = config.driver;
   if (typeof config.endpoint !== "string") invalid("endpoint must be an HTTP(S) API base URL.");
   let endpoint: URL;
@@ -299,9 +330,9 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
     invalid("endpoint must be an HTTP(S) API base URL without userinfo, query, or fragment.");
   }
   const basePath = endpoint.pathname.replace(/\/+$/, "");
-  endpoint.pathname = basePath + (driver === "ollama" ? "/api/chat" : "/chat/completions");
+  endpoint.pathname = basePath + (driver === "ollama" ? "/api/chat" : driver === "anthropic" ? "/v1/messages" : "/chat/completions");
   const url = endpoint.href;
-  const listUrl = `${endpoint.protocol}//${endpoint.host}${basePath}${driver === "ollama" ? "/api/tags" : "/models"}`;
+  const listUrl = `${endpoint.protocol}//${endpoint.host}${basePath}${driver === "ollama" ? "/api/tags" : driver === "anthropic" ? "/v1/models" : "/models"}`;
   const credentials = config.credentials;
   if (credentials !== undefined && (typeof credentials !== "string" || !/^[A-Za-z0-9._~+\/-]+=*$/.test(credentials))) invalid("credentials must be a nonempty bearer token.");
   timeoutValue(config.timeout);
@@ -320,7 +351,10 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
       if (normalized) secrets.push(normalized);
     }
   }
-  if (credentials) headers.set("authorization", `Bearer ${credentials}`);
+  if (driver === "anthropic") {
+    if (credentials) headers.set("x-api-key", credentials);
+    headers.set("anthropic-version", "2023-06-01");
+  } else if (credentials) headers.set("authorization", `Bearer ${credentials}`);
   // ponytail: known raw/URL-encoded secrets only; add encodings when a provider demonstrates them.
   const redactions = [...new Set(secrets.flatMap(secret => [secret, encodeURIComponent(secret)]))].sort((a, b) => b.length - a.length);
   const redact = (text: string): string => redactions.reduce((result, secret) => result.split(secret).join("[REDACTED]"), text);
@@ -368,6 +402,27 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
       return info;
     });
   }
+  function normalizeAnthropicModels(value: unknown): ModelInfo[] {
+    if (!object(value) || !Array.isArray((value as Record<string, unknown>).data)) protocolModels();
+    const data = (value as Record<string, unknown>).data as unknown[];
+    return data.map(entry => {
+      if (!object(entry) || typeof entry.id !== "string" || !entry.id.trim()) protocolModels();
+      const id = entry.id as string;
+      const providerMetadata: Record<string, JsonValue> = {};
+      let displayName: string | undefined;
+      for (const [key, data] of Object.entries(entry)) {
+        if (key === "id" || key === "display_name") continue;
+        try { JSON.stringify(data); } catch { protocolModels(); }
+        if (data !== undefined) providerMetadata[key] = data as JsonValue;
+      }
+      if (typeof entry.display_name === "string" && entry.display_name.trim()) displayName = entry.display_name;
+      // Also capture display_name in metadata for completeness? Preserve as not normalized, but name is normalized
+      const info: ModelInfo = { id: redact(id) };
+      if (displayName) info.name = redact(displayName);
+      if (Object.keys(providerMetadata).length) info.providerMetadata = providerMetadata;
+      return info;
+    });
+  }
   async function listModels(opts?: ListModelsOptions): Promise<ModelInfo[]> {
     // Read before narrowing via object() to avoid Record<string,unknown> widening.
     const rawTimeout = (opts as ListModelsOptions | undefined)?.timeout;
@@ -388,6 +443,51 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
     let response: Response | undefined;
     let requestId: string | undefined;
     try {
+      if (driver === "anthropic") {
+        const all: ModelInfo[] = [];
+        let cursor: string | undefined;
+        const seenCursors = new Set<string>();
+        // ponytail: sequential pagination, guard against non-progressing cursors; parallel fetch would violate timeout semantics.
+        for (let pages = 0; pages < 100; pages++) {
+          controller.signal.throwIfAborted();
+          const pageUrl = cursor === undefined ? listUrl : `${listUrl}?after_id=${encodeURIComponent(cursor)}`;
+          if (cursor !== undefined && seenCursors.has(cursor)) protocolModels("Malformed pagination cursor.");
+          if (cursor !== undefined) seenCursors.add(cursor);
+          response = await fetch(pageUrl, { method: "GET", headers, signal: controller.signal, redirect: "manual" });
+          const rawRequestId = response.headers.get("x-request-id") ?? response.headers.get("request-id");
+          const pageRequestId = rawRequestId === null ? undefined : redact(rawRequestId);
+          if (requestId === undefined) requestId = pageRequestId;
+          if (!response.ok) {
+            const text = await response.text();
+            controller.signal.throwIfAborted();
+            throw anthropicError(response.status, text, pageRequestId ?? requestId, redact);
+          }
+          const text = await response.text();
+          controller.signal.throwIfAborted();
+          let value: unknown;
+          try { value = JSON.parse(text); } catch { protocolModels("Provider returned invalid JSON."); }
+          if (!object(value) || !Array.isArray((value as Record<string, unknown>).data)) protocolModels();
+          const hasMore = (value as Record<string, unknown>).has_more;
+          if (hasMore !== undefined && typeof hasMore !== "boolean") protocolModels();
+          const rawLastId = (value as Record<string, unknown>).last_id;
+          if (hasMore) {
+            if (typeof rawLastId !== "string" || !rawLastId.trim()) protocolModels("Malformed pagination: last_id required when has_more true.");
+          } else if (rawLastId !== undefined && typeof rawLastId !== "string") protocolModels("Malformed last_id.");
+          const pageModels = normalizeAnthropicModels(value);
+          all.push(...pageModels);
+          if (!hasMore) return all;
+          if (pageModels.length === 0) protocolModels("Malformed pagination: has_more true with empty data.");
+          const nextCursor = rawLastId as string;
+          if (!nextCursor || nextCursor === cursor) protocolModels("Malformed pagination: cursor did not advance.");
+          if (seenCursors.has(nextCursor)) protocolModels("Malformed pagination: cursor cycle.");
+          cursor = nextCursor;
+          // loop continues, same controller/timer preserves operation-level timeout
+          // ensure body is consumed before next iteration (already via text())
+          if (response.body && !response.body.locked) await response.body.cancel().catch(() => {});
+          response = undefined;
+        }
+        protocolModels("Too many pagination pages.");
+      }
       controller.signal.throwIfAborted();
       response = await fetch(listUrl, { method: "GET", headers, signal: controller.signal, redirect: "manual" });
       const rawRequestId = response.headers.get("x-request-id") ?? response.headers.get("request-id");
@@ -446,14 +546,14 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
       if (!response.ok) {
         const text = await response.text();
         controller.signal.throwIfAborted();
-        throw driver === "ollama" ? ollamaError(response.status, text, requestId, redact, id) : httpError(response.status, text, requestId, redact);
+        throw driver === "ollama" ? ollamaError(response.status, text, requestId, redact, id) : driver === "anthropic" ? anthropicError(response.status, text, requestId, redact) : httpError(response.status, text, requestId, redact);
       }
       if (streaming) {
         const media = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
         if (!response.body || !(driver === "ollama" ? ["application/x-ndjson", "application/ndjson", "application/json"].includes(media ?? "") : media === "text/event-stream")) {
           throw new ConduitError("ProtocolError", driver === "ollama" ? "Expected an NDJSON response." : "Expected a text/event-stream response.");
         }
-        const events = driver === "ollama" ? ollamaStream(response.body, requestId, redact) : openaiStream(response.body, requestId, redact);
+        const events = driver === "ollama" ? ollamaStream(response.body, requestId, redact) : driver === "anthropic" ? anthropicStream(response.body, requestId, redact) : openaiStream(response.body, requestId, redact);
         for await (const event of events) {
           controller.signal.throwIfAborted();
           if (event.type === "done") { result = event.response; break; }
@@ -467,7 +567,7 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
         try { value = JSON.parse(text); } catch {
           throw new ConduitError("ProtocolError", "Provider returned invalid JSON.");
         }
-        result = driver === "ollama" ? ollamaResponse(value, requestId, redact) : decode(value, requestId, redact);
+        result = driver === "ollama" ? ollamaResponse(value, requestId, redact) : driver === "anthropic" ? anthropicResponse(value, requestId, redact) : decode(value, requestId, redact);
       }
     } catch (error) {
       if (controller.signal.aborted) throw controller.signal.reason;

@@ -1,0 +1,100 @@
+[
+  {
+    "id": "anthropic-single-model",
+    "driver": "anthropic",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "request-id": "req_anth_1"
+        },
+        "body": {
+          "data": [
+            {
+              "id": "claude-sonnet-4-20250514",
+              "type": "model",
+              "display_name": "Claude Sonnet 4",
+              "created_at": "2025-05-14T00:00:00Z"
+            }
+          ],
+          "has_more": false
+        }
+      }
+    },
+    "expected": {
+      "models": [
+        {
+          "id": "claude-sonnet-4-20250514",
+          "provider_metadata": {
+            "type": "model",
+            "display_name": "Claude Sonnet 4",
+            "created_at": "2025-05-14T00:00:00Z"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "anthropic-multiple-models",
+    "driver": "anthropic",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "data": [
+            {
+              "id": "claude-opus-4-20250514",
+              "type": "model",
+              "display_name": "Claude Opus 4"
+            },
+            {
+              "id": "claude-sonnet-4-20250514",
+              "type": "model",
+              "display_name": "Claude Sonnet 4"
+            }
+          ],
+          "has_more": false
+        }
+      }
+    },
+    "expected": {
+      "models": [
+        {
+          "id": "claude-opus-4-20250514",
+          "provider_metadata": {
+            "type": "model",
+            "display_name": "Claude Opus 4"
+          }
+        },
+        {
+          "id": "claude-sonnet-4-20250514",
+          "provider_metadata": {
+            "type": "model",
+            "display_name": "Claude Sonnet 4"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "anthropic-empty",
+    "driver": "anthropic",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "data": [],
+          "has_more": false
+        }
+      }
+    },
+    "expected": {
+      "models": []
+    }
+  }
+]

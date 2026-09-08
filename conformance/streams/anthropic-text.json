@@ -1,0 +1,156 @@
+[
+  {
+    "id": "anthropic-text",
+    "driver": "anthropic",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "request-id": "req_stream_1"
+        },
+        "fragments_base64": [
+          "ZXZlbnQ6IG1lc3NhZ2Vfc3RhcnQKZGF0YTogeyJ0eXBlIjoibWVzc2FnZV9zdGFydCIsIm1lc3NhZ2UiOnsiaWQiOiJtc2dfMTIzIiwidHlwZSI6Im1lc3NhZ2UiLCJyb2xlIjoiYXNzaXN0YW50IiwiY29udGVudCI6W10sIm1vZGVsIjoiY2xhdWRlLXNvbm5ldC00LTIwMjUwNTE0Iiwic3RvcF9yZWFzb24iOm51bGwsInN0b3Bfc2VxdWVuY2UiOm51bGwsInVzYWdlIjp7ImlucHV0X3Rva2VucyI6NCwib3V0cHV0X3Rva2VucyI6MX19fQoKZXZlbnQ6IGNvbnRlbnRfYmxvY2tfc3RhcnQKZGF0YTogeyJ0eXBlIjoiY29udGVudF9ibG9ja19zdGFydCIsImluZGV4IjowLCJjb250ZW50X2Jsb2NrIjp7InR5cGUiOiJ0ZXh0IiwidGV4dCI6IiJ9fQoKZXZlbnQ6IGNvbnRlbnRfYmxvY2tfZGVsdGEKZGF0YTogeyJ0eXBlIjoiY29udGVudF9ibG9ja19kZWx0YSIsImluZGV4IjowLCJkZWx0YSI6eyJ0eXBlIjoidGV4dF9kZWx0YSIsInRleHQiOiJIZWxsbyAifX0KCmV2ZW50OiBjb250ZW50X2Jsb2NrX2RlbHRhCmRhdGE6IHsidHlwZSI6ImNvbnRlbnRfYmxvY2tfZGVsdGEiLCJpbmRleCI6MCwiZGVsdGEiOnsidHlwZSI6InRleHRfZGVsdGEiLCJ0ZXh0Ijoid29ybGQifX0KCmV2ZW50OiBjb250ZW50X2Jsb2NrX3N0b3AKZGF0YTogeyJ0eXBlIjoiY29udGVudF9ibG9ja19zdG9wIiwiaW5kZXgiOjB9CgpldmVudDogbWVzc2FnZV9kZWx0YQpkYXRhOiB7InR5cGUiOiJtZXNzYWdlX2RlbHRhIiwiZGVsdGEiOnsic3RvcF9yZWFzb24iOiJlbmRfdHVybiIsInN0b3Bfc2VxdWVuY2UiOm51bGx9LCJ1c2FnZSI6eyJvdXRwdXRfdG9rZW5zIjoyfX0KCmV2ZW50OiBtZXNzYWdlX3N0b3AKZGF0YTogeyJ0eXBlIjoibWVzc2FnZV9zdG9wIn0KCg=="
+        ]
+      }
+    },
+    "expected": {
+      "events": [
+        {
+          "type": "start",
+          "id": "msg_123",
+          "model": "claude-sonnet-4-20250514"
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "Hello "
+        },
+        {
+          "type": "text_delta",
+          "index": 0,
+          "text": "world"
+        },
+        {
+          "type": "usage",
+          "usage": {
+            "input_tokens": 4,
+            "output_tokens": 1
+          }
+        },
+        {
+          "type": "usage",
+          "usage": {
+            "input_tokens": 4,
+            "output_tokens": 2
+          }
+        },
+        {
+          "type": "done",
+          "response": {
+            "id": "msg_123",
+            "model": "claude-sonnet-4-20250514",
+            "content": [
+              {
+                "type": "text",
+                "text": "Hello world"
+              }
+            ],
+            "finish_reason": "stop",
+            "provider_metadata": {
+              "finish_reason": "end_turn",
+              "request_id": "req_stream_1"
+            },
+            "usage": {
+              "input_tokens": 4,
+              "output_tokens": 2
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "anthropic-tool-stream",
+    "driver": "anthropic",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "request-id": "req_stream_tool"
+        },
+        "fragments_base64": [
+          "ZXZlbnQ6IG1lc3NhZ2Vfc3RhcnQKZGF0YTogeyJ0eXBlIjoibWVzc2FnZV9zdGFydCIsIm1lc3NhZ2UiOnsiaWQiOiJtc2dfNDU2IiwidHlwZSI6Im1lc3NhZ2UiLCJyb2xlIjoiYXNzaXN0YW50IiwiY29udGVudCI6W10sIm1vZGVsIjoiY2xhdWRlLXNvbm5ldC00LTIwMjUwNTE0Iiwic3RvcF9yZWFzb24iOm51bGwsInN0b3Bfc2VxdWVuY2UiOm51bGwsInVzYWdlIjp7ImlucHV0X3Rva2VucyI6MTAsIm91dHB1dF90b2tlbnMiOjF9fX0KCgpldmVudDogY29udGVudF9ibG9ja19zdGFydApkYXRhOiB7InR5cGUiOiJjb250ZW50X2Jsb2NrX3N0YXJ0IiwiaW5kZXgiOjAsImNvbnRlbnRfYmxvY2siOnsidHlwZSI6InRvb2xfdXNlIiwiaWQiOiJ0b29sdV8wMUFCIiwibmFtZSI6ImdldF93ZWF0aGVyIiwiaW5wdXQiOnt9fX0KCmV2ZW50OiBjb250ZW50X2Jsb2NrX2RlbHRhCmRhdGE6IHsidHlwZSI6ImNvbnRlbnRfYmxvY2tfZGVsdGEiLCJpbmRleCI6MCwiZGVsdGEiOnsidHlwZSI6ImlucHV0X2pzb25fZGVsdGEiLCJwYXJ0aWFsX2pzb24iOiJ7XCJsb2NhdGlvblwiOiBcInBhIn19fQoKZXZlbnQ6IGNvbnRlbnRfYmxvY2tfZGVsdGEKZGF0YTogeyJ0eXBlIjoiY29udGVudF9ibG9ja19kZWx0YSIsImluZGV4IjowLCJkZWx0YSI6eyJ0eXBlIjoiaW5wdXRfanNvbl9kZWx0YSIsInBhcnRpYWxfanNvbiI6InJpcyBcIn19fQoKZXZlbnQ6IGNvbnRlbnRfYmxvY2tfc3RvcApkYXRhOiB7InR5cGUiOiJjb250ZW50X2Jsb2NrX3N0b3AiLCJpbmRleCI6MH0KCmV2ZW50OiBtZXNzYWdlX2RlbHRhCmRhdGE6IHsidHlwZSI6Im1lc3NhZ2VfZGVsdGEiLCJkZWx0YSI6eyJzdG9wX3JlYXNvbiI6InRvb2xfdXNlIiwic3RvcF9zZXF1ZW5jZSI6bnVsbH0sInVzYWdlIjp7Im91dHB1dF90b2tlbnMiOjV9fQoKZXZlbnQ6IG1lc3NhZ2Vfc3RvcApkYXRhOiB7InR5cGUiOiJtZXNzYWdlX3N0b3AifQoK"
+        ]
+      }
+    },
+    "expected": {
+      "events": [
+        {
+          "type": "start",
+          "id": "msg_456",
+          "model": "claude-sonnet-4-20250514"
+        },
+        {
+          "type": "usage",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 1
+          }
+        },
+        {
+          "type": "tool_call_delta",
+          "index": 0,
+          "id": "toolu_01AB",
+          "name": "get_weather"
+        },
+        {
+          "type": "tool_call_delta",
+          "index": 0,
+          "argumentsDelta": "{\"location\": \"pa"
+        },
+        {
+          "type": "tool_call_delta",
+          "index": 0,
+          "argumentsDelta": "ris \""
+        },
+        {
+          "type": "usage",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5
+          }
+        },
+        {
+          "type": "done",
+          "response": {
+            "id": "msg_456",
+            "model": "claude-sonnet-4-20250514",
+            "content": [
+              {
+                "type": "tool_call",
+                "id": "toolu_01AB",
+                "name": "get_weather",
+                "arguments": {
+                  "location": "Paris"
+                }
+              }
+            ],
+            "finish_reason": "tool_call",
+            "provider_metadata": {
+              "finish_reason": "tool_use",
+              "request_id": "req_stream_tool"
+            },
+            "usage": {
+              "input_tokens": 10,
+              "output_tokens": 5
+            }
+          }
+        }
+      ]
+    }
+  }
+]

@@ -1,0 +1,79 @@
+[
+  {
+    "id": "anthropic-auth",
+    "driver": "anthropic",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 401,
+        "headers": {
+          "request-id": "req_err_1"
+        },
+        "body": {
+          "type": "error",
+          "error": {
+            "type": "authentication_error",
+            "message": "Invalid API key"
+          }
+        }
+      }
+    },
+    "expected": {
+      "error": {
+        "category": "AuthenticationError",
+        "status_code": 401,
+        "provider_code": "authentication_error",
+        "request_id": "req_err_1"
+      }
+    }
+  },
+  {
+    "id": "anthropic-rate-limit",
+    "driver": "anthropic",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 429,
+        "headers": {},
+        "body": {
+          "type": "error",
+          "error": {
+            "type": "rate_limit_error",
+            "message": "Rate limited"
+          }
+        }
+      }
+    },
+    "expected": {
+      "error": {
+        "category": "RateLimitError",
+        "status_code": 429,
+        "provider_code": "rate_limit_error"
+      }
+    }
+  },
+  {
+    "id": "anthropic-invalid-request",
+    "driver": "anthropic",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 400,
+        "headers": {},
+        "body": {
+          "type": "error",
+          "error": {
+            "type": "invalid_request_error",
+            "message": "Invalid request"
+          }
+        }
+      }
+    },
+    "expected": {
+      "error": {
+        "category": "InvalidRequestError",
+        "status_code": 400
+      }
+    }
+  }
+]

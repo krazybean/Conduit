@@ -1,0 +1,78 @@
+{
+  "id": "anthropic-text-request",
+  "driver": "anthropic",
+  "operation": "generate",
+  "input": {
+    "model": "claude-sonnet-4-20250514",
+    "request": {
+      "messages": [
+        {
+          "role": "system",
+          "content": "Be concise."
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Hel"
+            },
+            {
+              "type": "text",
+              "text": "lo"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": "Hi"
+        }
+      ],
+      "max_output_tokens": 32,
+      "temperature": 0.25,
+      "top_p": 0.8,
+      "stop": [
+        "END"
+      ],
+      "provider_options": {
+        "native_flag": {
+          "enabled": true
+        }
+      }
+    }
+  },
+  "expected": {
+    "wire_request": {
+      "method": "POST",
+      "path": "/v1/messages",
+      "headers": {
+        "anthropic-version": "2023-06-01",
+        "x-api-key": "<redacted>"
+      },
+      "body": {
+        "native_flag": {
+          "enabled": true
+        },
+        "model": "claude-sonnet-4-20250514",
+        "system": "Be concise.",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          },
+          {
+            "role": "assistant",
+            "content": "Hi"
+          }
+        ],
+        "stream": false,
+        "max_tokens": 32,
+        "temperature": 0.25,
+        "top_p": 0.8,
+        "stop_sequences": [
+          "END"
+        ]
+      }
+    }
+  }
+}
