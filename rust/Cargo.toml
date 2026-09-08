@@ -1,7 +1,18 @@
 [package]
 name = "conduit"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2021"
-publish = false
 license = "MIT"
-description = "Conduit Rust scaffold; no public API yet"
+description = "Conduit — lightweight AI driver for OpenAI-compatible, Ollama, Anthropic, Gemini (Rust, sync)"
+repository = "https://github.com/krazybean/Conduit"
+readme = "README.md"
+keywords = ["ai", "llm", "openai", "ollama", "anthropic", "gemini"]
+categories = ["api-bindings"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+ureq = { version = "2.9", features = ["json"] }
+
+[dev-dependencies]
+serde_json = "1.0"
