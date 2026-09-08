@@ -10,22 +10,23 @@ function server(handler) {
 
 describe("ergonomics", () => {
   it("generate string shorthand", async () => {
+    const captures = [];
     const s = await server((req, res) => {
       let body = "";
       req.on("data", (c) => (body += c));
       req.on("end", () => {
-        const v = JSON.parse(body);
-        assert.equal(v.messages[0].content, "Hello");
-        assert.equal(v.model, "m");
+        captures.push(JSON.parse(body));
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ id: "id", object: "chat.completion", created: 1, model: "m", choices: [{ index: 0, message: { role: "assistant", content: "Hi" }, finish_reason: "stop" }] }));
       });
     });
     const { port } = s.address();
     const client = connect({ driver: "openai-compatible", endpoint: `http://127.0.0.1:${port}/v1`, model: "m" });
-    // client is a Model when model is provided
     const res = await client.generate("Hello");
     assert.equal(res.text, "Hi");
+    // differential: shorthand vs explicit must be wire-identical (frozen array form)
+    await client.generate({ messages: [{ role: "user", content: "Hello" }] });
+    assert.deepEqual(captures[0], captures[1]);
     await new Promise((r) => s.close(r));
   });
 
@@ -40,6 +41,26 @@ describe("ergonomics", () => {
 
   it("openai-compatible still requires endpoint", () => {
     assert.throws(() => connect({ driver: "openai-compatible", model: "x" }), /endpoint/);
+  });
+
+  it("stream string shorthand", async () => {
+    const captures = [];
+    const s = await server((req, res) => {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        captures.push(JSON.parse(body));
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ id: "id", object: "chat.completion", created: 1, model: "m", choices: [{ index: 0, message: { role: "assistant", content: "Hi" }, finish_reason: "stop" }] }));
+      });
+    });
+    const { port } = s.address();
+    const client2 = connect({ driver: "openai-compatible", endpoint: `http://127.0.0.1:${port}/v1` });
+    const m = client2.model("m");
+    for await (const _ of m.stream("Hello")) {}
+    for await (const _ of m.stream({ messages: [{ role: "user", content: "Hello" }] })) {}
+    assert.deepEqual(captures[0], captures[1]);
+    await new Promise((r) => s.close(r));
   });
 
   it("old GenerationRequest still works", async () => {

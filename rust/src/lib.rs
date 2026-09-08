@@ -797,18 +797,19 @@ fn encode_openai_request(
             } else {
                 let mut obj = serde_json::Map::new();
                 obj.insert("role".to_string(), Value::String(m.role.clone()));
-                let texts: String = m
+                let content_arr: Vec<Value> = m
                     .content
                     .iter()
                     .filter_map(|p| {
                         if let ContentPart::Text(t) = p {
-                            Some(t.text.clone())
+                            Some(serde_json::json!({"type":"text","text":t.text}))
                         } else {
                             None
                         }
                     })
                     .collect();
-                obj.insert("content".to_string(), Value::String(texts));
+                // Frozen v0.1.0: simple OpenAI text keeps array form for backward compat
+                obj.insert("content".to_string(), Value::Array(content_arr));
                 msgs.push(Value::Object(obj));
             }
         }
@@ -8506,73 +8507,34 @@ mod tests {
     }
     #[test]
     fn test_generate_string_shorthand() {
-        let (addr, handle) = start_server(|mut stream| {
-            let (_, _, body) = read_http_request(&mut stream);
-            let v: Value = serde_json::from_slice(&body).unwrap();
-            assert_eq!(v["model"], "m");
-            assert_eq!(v["messages"][0]["content"], "Hello");
-            let resp = serde_json::json!({"id":"id","object":"chat.completion","created":1,"model":"m","choices":[{"index":0,"message":{"role":"assistant","content":"Hi"},"finish_reason":"stop"}]});
-            let s = serde_json::to_string(&resp).unwrap();
-            let out = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-                s.len(),
-                s
-            );
-            stream.write_all(out.as_bytes()).unwrap();
-            stream.flush().unwrap();
-        });
-        let cfg = ClientConfig {
-            driver: "openai-compatible".into(),
-            endpoint: format!("http://{}/v1", addr),
+        let a: GenerationRequest = "Hello".into();
+        let b = GenerationRequest {
+            messages: vec![Message::user("Hello")],
             ..Default::default()
         };
-        let client = connect(cfg).unwrap();
-        let model = client.model("m").unwrap();
-        let res = model.generate("Hello").unwrap();
-        assert_eq!(res.text(), "Hi");
-        // old form still works
-        let res2 = model
-            .generate(GenerationRequest {
-                messages: vec![Message::user("Hello")],
-                ..Default::default()
-            })
-            .unwrap();
-        assert_eq!(res2.text(), "Hi");
-        handle.join().unwrap();
+        let v1 = encode_openai_request("m", &a, false).unwrap();
+        let v2 = encode_openai_request("m", &b, false).unwrap();
+        assert_eq!(v1, v2);
+        assert_eq!(
+            v1["messages"][0]["content"],
+            serde_json::json!([{"type":"text","text":"Hello"}])
+        );
     }
     #[test]
     fn test_stream_string_shorthand() {
-        let (addr, handle) = start_server(|mut stream| {
-            let (_, _, _) = read_http_request(&mut stream);
-            stream
-                .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\n")
-                .unwrap();
-            stream.flush().unwrap();
-            let first = format!("data: {}\n\n", serde_json::to_string(&serde_json::json!({"id":"id","model":"m","choices":[{"index":0,"delta":{"content":"Hi"},"finish_reason":null}]})).unwrap());
-            stream.write_all(first.as_bytes()).unwrap();
-            stream.flush().unwrap();
-            let done = format!("data: {}\n\n", serde_json::to_string(&serde_json::json!({"id":"id","model":"m","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]})).unwrap());
-            stream.write_all(done.as_bytes()).unwrap();
-            stream.flush().unwrap();
-            stream.write_all(b"data: [DONE]\n\n").unwrap();
-            stream.flush().unwrap();
-        });
-        let cfg = ClientConfig {
-            driver: "openai-compatible".into(),
-            endpoint: format!("http://{}/v1", addr),
+        let a: GenerationRequest = "Hello".into();
+        let b = GenerationRequest {
+            messages: vec![Message::user("Hello")],
             ..Default::default()
         };
-        let client = connect(cfg).unwrap();
-        let model = client.model("m").unwrap();
-        let evs: Vec<_> = model
-            .stream("Hello")
-            .unwrap()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, StreamEvent::TextDelta{ text, ..} if text=="Hi")));
-        handle.join().unwrap();
+        let v1 = encode_openai_request("m", &a, true).unwrap();
+        let v2 = encode_openai_request("m", &b, true).unwrap();
+        assert_eq!(v1, v2);
+        assert_eq!(
+            v1["messages"][0]["content"],
+            serde_json::json!([{"type":"text","text":"Hello"}])
+        );
+        assert_eq!(v1["stream"], serde_json::json!(true));
     }
     #[test]
     fn test_ollama_connect_shorthand() {

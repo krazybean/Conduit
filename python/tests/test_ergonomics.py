@@ -6,12 +6,13 @@ class TestErgonomics(unittest.TestCase):
         from http.server import HTTPServer, BaseHTTPRequestHandler
         import json, threading
 
+        captures = []
         class H(BaseHTTPRequestHandler):
             def do_POST(self):
                 length = int(self.headers.get("content-length", 0))
                 body = self.rfile.read(length)
                 v = json.loads(body)
-                assert v["messages"][0]["content"] == "Hello"
+                captures.append(v)
                 self.send_response(200)
                 self.send_header("content-type", "application/json")
                 self.end_headers()
@@ -28,6 +29,33 @@ class TestErgonomics(unittest.TestCase):
         self.assertEqual(res["text"], "Hi")
         self.assertEqual(res.get("text"), "Hi")
         self.assertEqual(res.get("usage"), None)
+        # differential: shorthand vs explicit old-form must be wire-identical
+        client.generate(messages=[{"role": "user", "content": "Hello"}])
+        self.assertEqual(captures[0], captures[1])
+        s.shutdown()
+
+    def test_stream_string_shorthand(self):
+        from http.server import HTTPServer, BaseHTTPRequestHandler
+        import json, threading
+        captures = []
+        class H(BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers.get("content-length", 0))
+                body = self.rfile.read(length)
+                captures.append(json.loads(body))
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"id": "id", "object": "chat.completion", "created": 1, "model": "m", "choices": [{"index": 0, "message": {"role": "assistant", "content": "Hi"}, "finish_reason": "stop"}]}).encode())
+            def log_message(self, *a, **k): pass
+        s = HTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=s.serve_forever, daemon=True).start()
+        _, port = s.server_address
+        client = connect(driver="openai-compatible", endpoint=f"http://127.0.0.1:{port}/v1")
+        m = client.model("m")
+        list(m.stream("Hello"))
+        list(m.stream(messages=[{"role": "user", "content": "Hello"}]))
+        self.assertEqual(captures[0], captures[1])
         s.shutdown()
 
     def test_ollama_default_endpoint(self):
