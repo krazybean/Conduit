@@ -11,6 +11,7 @@ its local HTTP tests. Python/Rust consumers will follow the same cases. JSON key
 | `streams/` | Provider byte fragments → expected normalized event sequence |
 | `errors/` | Local validation, HTTP/network/protocol/timeout/cancellation failures |
 | `capabilities/` | Protocol/model evidence → effective tri-state capabilities |
+| `models/` | Provider model listing (`list_models`) normalized `ModelInfo[]` |
 
 A file contains one case or an array of related cases. Each case has `id`, optional `driver`, `operation`, `input`, and `expected`.
 Driver-specific input may include `client_config`, `model`, `request`, and `wire`.
@@ -52,6 +53,8 @@ Implemented files: `requests/openai-text.json` (one request),
 (thirteen HTTP errors). These synthetic wire examples are regression contracts,
 not claims of certification against any live provider. Run all 20 cases with
 `npm test --prefix typescript`. Capabilities remain placeholders.
+
+Listing: `models/ollama-tags.json` (8 cases: single/multiple/metadata/empty/malformed) and `models/openai-models.json` (9 cases: single/multiple/sparse/empty/malformed). Coverage includes provider metadata, defensive sparse objects, and ProtocolError for malformed successful payloads.
 
 Streaming: `streams/openai-text.json` adds 22 cases with explicit base64 read
 boundaries and expected normalized events or a terminal error category. Coverage

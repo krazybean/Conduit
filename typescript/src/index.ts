@@ -3,11 +3,11 @@ import { object } from "./response.js";
 import { ollamaRequest, ollamaResponse, ollamaError, ollamaStream } from "./ollama.js";
 import { openaiStream } from "./openai-stream.js";
 import { ConduitError } from "./errors.js";
-import type { Client, ClientConfig, GenerationRequest, GenerationResponse, Model, StreamEvent } from "./types.js";
+import type { Client, ClientConfig, GenerationRequest, GenerationResponse, JsonValue, ListModelsOptions, Model, ModelInfo, StreamEvent } from "./types.js";
 
 export { ConduitError } from "./errors.js";
 export type { ErrorCode, ErrorDetails } from "./errors.js";
-export type { Client, ClientConfig, GenerationRequest, GenerationResponse, JsonValue, Message, Model, StreamEvent, TextPart, Usage } from "./types.js";
+export type { Client, ClientConfig, GenerationRequest, GenerationResponse, JsonValue, ListModelsOptions, Message, Model, ModelInfo, StreamEvent, TextPart, Usage } from "./types.js";
 
 const ownedFields = new Set([
   "model", "messages", "stream", "stream_options", "max_tokens", "max_completion_tokens",
@@ -117,8 +117,10 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
   if (!["http:", "https:"].includes(endpoint.protocol) || endpoint.username || endpoint.password || endpoint.search || endpoint.hash || config.endpoint.includes("?") || config.endpoint.includes("#")) {
     invalid("endpoint must be an HTTP(S) API base URL without userinfo, query, or fragment.");
   }
-  endpoint.pathname = endpoint.pathname.replace(/\/+$/, "") + (driver === "ollama" ? "/api/chat" : "/chat/completions");
+  const basePath = endpoint.pathname.replace(/\/+$/, "");
+  endpoint.pathname = basePath + (driver === "ollama" ? "/api/chat" : "/chat/completions");
   const url = endpoint.href;
+  const listUrl = `${endpoint.protocol}//${endpoint.host}${basePath}${driver === "ollama" ? "/api/tags" : "/models"}`;
   const credentials = config.credentials;
   if (credentials !== undefined && (typeof credentials !== "string" || !/^[A-Za-z0-9._~+\/-]+=*$/.test(credentials))) invalid("credentials must be a nonempty bearer token.");
   timeoutValue(config.timeout);
@@ -141,6 +143,106 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
   // ponytail: known raw/URL-encoded secrets only; add encodings when a provider demonstrates them.
   const redactions = [...new Set(secrets.flatMap(secret => [secret, encodeURIComponent(secret)]))].sort((a, b) => b.length - a.length);
   const redact = (text: string): string => redactions.reduce((result, secret) => result.split(secret).join("[REDACTED]"), text);
+  function protocolModels(message = "Malformed or unsupported model listing response."): never {
+    throw new ConduitError("ProtocolError", message);
+  }
+  function normalizeOllamaModels(value: unknown): ModelInfo[] {
+    if (!object(value) || !Array.isArray((value as Record<string, unknown>).models)) protocolModels();
+    const models = (value as Record<string, unknown>).models as unknown[];
+    return models.map(entry => {
+      if (!object(entry)) protocolModels();
+      const id = typeof entry.name === "string" ? entry.name : typeof entry.model === "string" ? entry.model : undefined;
+      if (typeof id !== "string" || !id.trim()) protocolModels();
+      const providerMetadata: Record<string, JsonValue> = {};
+      for (const [key, data] of Object.entries(entry)) {
+        if (key === "name" || key === "model") continue;
+        // Keep only JSON-compatible values; any non-JSON would have been rejected as malformed earlier, but stay defensive.
+        try { JSON.stringify(data); } catch { protocolModels(); }
+        if (data !== undefined) providerMetadata[key] = data as JsonValue;
+      }
+      // Preserve the alternate identifier in metadata when present and distinct.
+      if (typeof entry.model === "string" && entry.model !== id) providerMetadata.model = entry.model as JsonValue;
+      else if (typeof entry.name === "string" && entry.name !== id) providerMetadata.name = entry.name as JsonValue;
+      const info: ModelInfo = { id: redact(id) };
+      if (typeof entry.name === "string" && entry.name.trim()) info.name = redact(entry.name);
+      if (Object.keys(providerMetadata).length) info.providerMetadata = providerMetadata;
+      return info;
+    });
+  }
+  function normalizeOpenAIModels(value: unknown): ModelInfo[] {
+    if (!object(value) || !Array.isArray((value as Record<string, unknown>).data)) protocolModels();
+    const data = (value as Record<string, unknown>).data as unknown[];
+    return data.map(entry => {
+      if (!object(entry) || typeof entry.id !== "string" || !entry.id.trim()) protocolModels();
+      const id = entry.id as string;
+      const providerMetadata: Record<string, JsonValue> = {};
+      for (const [key, data] of Object.entries(entry)) {
+        if (key === "id") continue;
+        try { JSON.stringify(data); } catch { protocolModels(); }
+        if (data !== undefined) providerMetadata[key] = data as JsonValue;
+      }
+      const info: ModelInfo = { id: redact(id) };
+      // Preserve a display name if provider reuses id-like field; keep optional.
+      if (Object.keys(providerMetadata).length) info.providerMetadata = providerMetadata;
+      return info;
+    });
+  }
+  async function listModels(opts?: ListModelsOptions): Promise<ModelInfo[]> {
+    // Read before narrowing via object() to avoid Record<string,unknown> widening.
+    const rawTimeout = (opts as ListModelsOptions | undefined)?.timeout;
+    const rawSignal = (opts as ListModelsOptions | undefined)?.signal;
+    if (opts !== undefined) {
+      if (!object(opts)) invalid("listModels options must be an object.");
+      keys(opts, new Set(["timeout", "signal"]));
+    }
+    timeoutValue(rawTimeout);
+    if (rawSignal !== undefined && !(rawSignal instanceof AbortSignal)) invalid("signal must be an AbortSignal.");
+    const timeout = rawTimeout ?? defaultTimeout;
+    const signal = rawSignal;
+    const controller = new AbortController();
+    const cancel = () => controller.abort(new ConduitError("CancelledError", "Request cancelled by caller."));
+    if (signal?.aborted) cancel();
+    else signal?.addEventListener("abort", cancel, { once: true });
+    const timer = timeout === undefined ? undefined : setTimeout(() => controller.abort(new ConduitError("TimeoutError", "Request deadline exceeded.")), timeout);
+    let response: Response | undefined;
+    let requestId: string | undefined;
+    try {
+      controller.signal.throwIfAborted();
+      response = await fetch(listUrl, { method: "GET", headers, signal: controller.signal, redirect: "manual" });
+      const rawRequestId = response.headers.get("x-request-id") ?? response.headers.get("request-id");
+      requestId = rawRequestId === null ? undefined : redact(rawRequestId);
+      if (!response.ok) {
+        const text = await response.text();
+        controller.signal.throwIfAborted();
+        throw driver === "ollama" ? ollamaError(response.status, text, requestId, redact) : httpError(response.status, text, requestId, redact);
+      }
+      const text = await response.text();
+      controller.signal.throwIfAborted();
+      let value: unknown;
+      try { value = JSON.parse(text); } catch { protocolModels("Provider returned invalid JSON."); }
+      const models = driver === "ollama" ? normalizeOllamaModels(value) : normalizeOpenAIModels(value);
+      return models;
+    } catch (error) {
+      if (controller.signal.aborted) throw controller.signal.reason;
+      if (error instanceof ConduitError) {
+        if (error.name === "ProtocolError" && response) {
+          error.statusCode = response.status;
+          if (requestId !== undefined) error.requestId = requestId;
+        }
+        throw error;
+      }
+      const native = error instanceof Error ? error : undefined;
+      const cause = native && object(native.cause) ? native.cause : native;
+      throw new ConduitError("ConnectionError", "Provider connection failed.", {
+        ...(cause && { cause: { name: redact(typeof cause.name === "string" ? cause.name : "Error"), message: redact(typeof cause.message === "string" ? cause.message : "Native fetch failed."), ...("code" in cause && typeof cause.code === "string" && { code: redact(cause.code) }) } }),
+      });
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", cancel);
+      controller.abort();
+      if (response?.body && !response.body.locked) await response.body.cancel().catch(() => {});
+    }
+  }
   async function* operation(id: string, request: GenerationRequest, streaming: boolean): AsyncGenerator<StreamEvent> {
     const body = encode(id, request, streaming, driver);
     const timeout = request.timeout ?? defaultTimeout;
@@ -210,6 +312,7 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
     if (result) yield { type: "done", response: result };
   }
   const client: Client = Object.freeze({
+    listModels,
     model(id: string): Model {
       if (typeof id !== "string" || !id.trim()) invalid("model must be a nonempty string.");
       return Object.freeze({

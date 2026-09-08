@@ -47,8 +47,20 @@ export interface GenerationResponse {
   providerMetadata: { finishReason?: string; requestId?: string; [key: string]: JsonValue | undefined };
 }
 
+export interface ModelInfo {
+  id: string;
+  name?: string;
+  providerMetadata?: Record<string, JsonValue>;
+}
+
+export interface ListModelsOptions {
+  timeout?: number;
+  signal?: AbortSignal;
+}
+
 export interface Client {
   model(id: string): Model;
+  listModels(options?: ListModelsOptions): Promise<ModelInfo[]>;
 }
 
 export type StreamEvent =

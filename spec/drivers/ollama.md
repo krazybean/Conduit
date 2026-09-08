@@ -62,13 +62,18 @@ is ModelNotFoundError only for the exact native missing-model message naming the
 selected model (single/double quotes, including the older pull hint); generic
 404 remains ProviderError. In-band error strings are ProviderError, with no done.
 
+## Model listing
+
+`client.listModels()` uses `GET /api/tags` relative to the server base (e.g. `http://localhost:11434/api/tags`), preserving custom base paths and rejecting userinfo/query/fragment like generation. No request body. Map each entry's `name` (preferred) or `model` to `ModelInfo.id` so the returned id is usable with `client.model(id)`; `name` is echoed when present. Remaining fields (`modified_at`, `size`, `digest`, `details` including `family`, `families`, `parameter_size`, `quantization_level`, `format`) stay in `providerMetadata`. Missing `models` array or missing string identifier is `ProtocolError`; an empty array is valid and returns `[]`. HTTP errors reuse the shared categories (`401`→`AuthenticationError`, `403`→`AuthorizationError`, `429`→`RateLimitError`, `5xx`→`ProviderError`, `404` with exact native missing-model message →`ModelNotFoundError` otherwise `ProviderError`). Timeouts, cancellation, first-abort-wins, and redaction reuse the generation lifecycle; credentials are not required for listing.
+
 ## Evidence and scope
 
 Checked against the official [chat API](https://docs.ollama.com/api/chat),
 [streaming](https://docs.ollama.com/api/streaming),
 [errors](https://docs.ollama.com/api/errors),
-[option meanings](https://docs.ollama.com/modelfile), and
+[option meanings](https://docs.ollama.com/modelfile),
+[listing](https://github.com/ollama/ollama/blob/main/docs/api.md#list-local-models), and
 [server error handling](https://github.com/ollama/ollama/blob/main/server/routes.go).
 Fixtures are synthetic regression contracts, not live provider certification.
-Model listing (/api/tags), remote capabilities, tools, structured output, vision,
+Remote capabilities, tools, structured output, vision,
 embeddings, model pulling, and lifecycle management remain outside this slice.

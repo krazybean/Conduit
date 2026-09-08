@@ -1,0 +1,195 @@
+[
+  {
+    "id": "openai-single-model",
+    "driver": "openai-compatible",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": { "x-request-id": "req-ml-1" },
+        "body": {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4o-mini",
+              "object": "model",
+              "created": 1234567890,
+              "owned_by": "openai"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "models": [
+        {
+          "id": "gpt-4o-mini",
+          "provider_metadata": {
+            "object": "model",
+            "created": 1234567890,
+            "owned_by": "openai"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "openai-multiple-models",
+    "driver": "openai-compatible",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "object": "list",
+          "data": [
+            { "id": "gpt-4o", "object": "model", "created": 1, "owned_by": "openai" },
+            { "id": "gpt-4o-mini", "object": "model", "created": 2, "owned_by": "openai" },
+            { "id": "o1-mini", "object": "model", "created": 3, "owned_by": "openai" }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "models": [
+        { "id": "gpt-4o", "provider_metadata": { "object": "model", "created": 1, "owned_by": "openai" } },
+        { "id": "gpt-4o-mini", "provider_metadata": { "object": "model", "created": 2, "owned_by": "openai" } },
+        { "id": "o1-mini", "provider_metadata": { "object": "model", "created": 3, "owned_by": "openai" } }
+      ]
+    }
+  },
+  {
+    "id": "openai-sparse-compatible",
+    "driver": "openai-compatible",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "object": "list",
+          "data": [
+            { "id": "model-a" },
+            { "id": "model-b", "owned_by": "custom" },
+            { "id": "model-c", "created": 999 }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "models": [
+        { "id": "model-a" },
+        { "id": "model-b", "provider_metadata": { "owned_by": "custom" } },
+        { "id": "model-c", "provider_metadata": { "created": 999 } }
+      ]
+    }
+  },
+  {
+    "id": "openai-provider-metadata",
+    "driver": "openai-compatible",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "object": "list",
+          "data": [
+            {
+              "id": "llama-3.2-3b",
+              "object": "model",
+              "created": 1700000000,
+              "owned_by": "lm-studio"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "models": [
+        {
+          "id": "llama-3.2-3b",
+          "provider_metadata": {
+            "object": "model",
+            "created": 1700000000,
+            "owned_by": "lm-studio"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "openai-empty-data",
+    "driver": "openai-compatible",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": { "object": "list", "data": [] }
+      }
+    },
+    "expected": { "models": [] }
+  },
+  {
+    "id": "openai-malformed-missing-data",
+    "driver": "openai-compatible",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": { "object": "list" }
+      }
+    },
+    "expected": {
+      "error": { "category": "ProtocolError", "status_code": 200 }
+    }
+  },
+  {
+    "id": "openai-malformed-data-not-array",
+    "driver": "openai-compatible",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": { "object": "list", "data": "not-array" }
+      }
+    },
+    "expected": {
+      "error": { "category": "ProtocolError", "status_code": 200 }
+    }
+  },
+  {
+    "id": "openai-malformed-missing-id",
+    "driver": "openai-compatible",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": { "object": "list", "data": [{ "object": "model" }] }
+      }
+    },
+    "expected": {
+      "error": { "category": "ProtocolError", "status_code": 200 }
+    }
+  },
+  {
+    "id": "openai-malformed-invalid-json",
+    "driver": "openai-compatible",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body_text": "not json at all"
+      }
+    },
+    "expected": {
+      "error": { "category": "ProtocolError", "status_code": 200 }
+    }
+  }
+]

@@ -1,0 +1,234 @@
+[
+  {
+    "id": "ollama-single-model",
+    "driver": "ollama",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": { "x-request-id": "req-1" },
+        "body": {
+          "models": [
+            {
+              "name": "qwen3:8b",
+              "model": "qwen3:8b",
+              "modified_at": "2024-01-01T00:00:00Z",
+              "size": 12345,
+              "digest": "abc123",
+              "details": {
+                "family": "qwen3",
+                "parameter_size": "8.2B",
+                "quantization_level": "Q4_K_M",
+                "format": "gguf"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "models": [
+        {
+          "id": "qwen3:8b",
+          "name": "qwen3:8b",
+          "provider_metadata": {
+            "modified_at": "2024-01-01T00:00:00Z",
+            "size": 12345,
+            "digest": "abc123",
+            "details": {
+              "family": "qwen3",
+              "parameter_size": "8.2B",
+              "quantization_level": "Q4_K_M",
+              "format": "gguf"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "ollama-multiple-models",
+    "driver": "ollama",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "models": [
+            {
+              "name": "qwen3:8b",
+              "modified_at": "2024-01-01T00:00:00Z",
+              "size": 100,
+              "digest": "d1",
+              "details": { "family": "qwen3" }
+            },
+            {
+              "name": "llama3.2:3b",
+              "model": "llama3.2:3b",
+              "modified_at": "2024-02-01T00:00:00Z",
+              "size": 200,
+              "digest": "d2",
+              "details": { "family": "llama" }
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "models": [
+        {
+          "id": "qwen3:8b",
+          "name": "qwen3:8b",
+          "provider_metadata": {
+            "modified_at": "2024-01-01T00:00:00Z",
+            "size": 100,
+            "digest": "d1",
+            "details": { "family": "qwen3" }
+          }
+        },
+        {
+          "id": "llama3.2:3b",
+          "name": "llama3.2:3b",
+          "provider_metadata": {
+            "modified_at": "2024-02-01T00:00:00Z",
+            "size": 200,
+            "digest": "d2",
+            "details": { "family": "llama" }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "ollama-provider-metadata",
+    "driver": "ollama",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "models": [
+            {
+              "name": "mistral:7b",
+              "size": 500,
+              "digest": "deadbeef",
+              "details": {
+                "families": ["mistral"],
+                "parameter_size": "7B",
+                "quantization_level": "Q4_0"
+              },
+              "modified_at": "2024-03-03T03:03:03Z"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "models": [
+        {
+          "id": "mistral:7b",
+          "name": "mistral:7b",
+          "provider_metadata": {
+            "size": 500,
+            "digest": "deadbeef",
+            "details": {
+              "families": ["mistral"],
+              "parameter_size": "7B",
+              "quantization_level": "Q4_0"
+            },
+            "modified_at": "2024-03-03T03:03:03Z"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "ollama-empty",
+    "driver": "ollama",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": { "models": [] }
+      }
+    },
+    "expected": { "models": [] }
+  },
+  {
+    "id": "ollama-malformed-missing-models",
+    "driver": "ollama",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": {}
+      }
+    },
+    "expected": {
+      "error": {
+        "category": "ProtocolError",
+        "status_code": 200
+      }
+    }
+  },
+  {
+    "id": "ollama-malformed-not-array",
+    "driver": "ollama",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": { "models": "not-an-array" }
+      }
+    },
+    "expected": {
+      "error": {
+        "category": "ProtocolError",
+        "status_code": 200
+      }
+    }
+  },
+  {
+    "id": "ollama-malformed-missing-id",
+    "driver": "ollama",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "models": [{ "size": 123 }]
+        }
+      }
+    },
+    "expected": {
+      "error": {
+        "category": "ProtocolError",
+        "status_code": 200
+      }
+    }
+  },
+  {
+    "id": "ollama-malformed-invalid-json",
+    "driver": "ollama",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body_text": "not json"
+      }
+    },
+    "expected": {
+      "error": {
+        "category": "ProtocolError",
+        "status_code": 200
+      }
+    }
+  }
+]

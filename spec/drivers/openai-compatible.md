@@ -24,7 +24,9 @@ The first slice maps the output budget to `max_tokens`, for broad compatibility;
 endpoint/model rejects a normalized feature, surface a normalized error.
 Do not silently try another field, model, endpoint, or API.
 
-Listing and tools remain future slices. Text streaming is specified below.
+Model listing uses `GET /models` relative to the API base (e.g. `http://localhost:1234/v1/models`), preserving base path like chat completions. No body; reuse the same Authorization and custom-header handling, redirect rejection, and endpoint validation. Normalize `data[]` entries: `id` → `ModelInfo.id`; remaining fields (`object`, `created`, `owned_by`) stay in `providerMetadata`. Require `data` array and string `id`; missing/invalid is `ProtocolError`; empty array is valid `[]`. Be defensive: tolerate sparse compatible objects, do not require `object`/`created`/`owned_by`. HTTP categories are the same as generation (`401`→`AuthenticationError`, `403`→`AuthorizationError`, `429`→`RateLimitError`, `5xx`→`ProviderError`, `404` with `model_not_found`→`ModelNotFoundError` else `ProviderError`). No pagination, no provider-specific branches.
+
+Tools remain future. Text streaming is specified below.
 Native finish reasons remain diagnostic metadata.
 
 ## Implemented first slice

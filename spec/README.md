@@ -1,7 +1,7 @@
 # Conduit specification — draft v0
 
 This language-neutral contract is authoritative; implementations must have
-equivalent observable behavior, not identical syntax. The TypeScript OpenAI-compatible text generation and streaming slices are implemented;
+equivalent observable behavior, not identical syntax. The TypeScript OpenAI-compatible text generation, streaming, and model-listing slices are implemented;
 other operations and languages remain planned. MUST/MUST NOT state requirements; proposals explicitly marked
 provisional can be refined with concrete wire fixtures before implementation.
 Snake-case field names describe semantics, not mandatory language spellings.
