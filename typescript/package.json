@@ -1,10 +1,13 @@
 {
   "name": "conduit",
-  "version": "0.0.0",
-  "private": true,
-  "description": "Small provider-neutral AI driver: OpenAI-compatible text generation",
+  "version": "0.1.0",
+  "description": "Conduit — lightweight AI driver for OpenAI-compatible, Ollama, Anthropic, Gemini (TypeScript)",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/krazybean/Conduit.git"
+  },
   "engines": {
     "node": ">=22.13.0"
   },
@@ -14,6 +17,9 @@
       "import": "./dist/index.js"
     }
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",

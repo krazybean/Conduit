@@ -1,73 +1,81 @@
-# Conduit
+# Conduit — lightweight AI driver (v0.1.0)
 
-A lightweight, dependency-minimal AI model driver library for local and hosted
-providers. Small, explicit model access in the spirit of `requests` or `pg`.
+Conduit is a lightweight AI driver/library for talking to local and hosted model APIs.
+One explicit `connect` → `model` → `generate`/`stream` per language, no framework.
 
-**Implemented:** TypeScript/JavaScript OpenAI-compatible Chat Completions text
-generation and streaming. Python, Rust, and other drivers remain scaffolds.
-The package is local/private; nothing is published yet.
+Conduit is **not** an agent framework, orchestration, RAG, memory, prompt management, or workflow engine. It owns transport and normalization; your app owns history, tools execution, and retries.
+
+**Product test:** can you add local or hosted AI to a new app in ~10 minutes without dragging in a framework? If yes, Conduit is working.
+
+Drivers (v0): `openai-compatible` · `ollama` (native `/api/chat`) · `anthropic` (`/v1/messages`) · `gemini` (`/v1beta/models/...:generateContent`)
+
+Languages: TypeScript/JavaScript (Node 22.13+ ESM, `fetch`), Python 3.10+ (stdlib `http.client`), Rust (sync `ureq` + `serde_json`)
 
 ```ts
+// TypeScript — OpenAI-compatible
 import { connect } from "./typescript/dist/index.js";
-
-const model = connect({
-  driver: "openai-compatible",
-  endpoint: "http://localhost:1234/v1",
-  model: "my-model",
-  credentials: process.env.CONDUIT_API_KEY, // optional for local endpoints
-});
-const response = await model.generate({
-  messages: [{ role: "user", content: "Hello" }],
-});
-console.log(response.text);
-```
-
-Stream using the same model and request options:
-
-```ts
-for await (const event of model.stream({ messages: [{ role: "user", content: "Hello" }] })) {
-  if (event.type === "text_delta") process.stdout.write(event.text);
-  // event.type === "done" exposes the final GenerationResponse in event.response.
+const client = connect({ driver: "openai-compatible", endpoint: "http://localhost:1234/v1", credentials: process.env.CONDUIT_API_KEY });
+console.log(await client.listModels());
+const model = client.model("my-model");
+const res = await model.generate({ messages: [{ role: "user", content: "Hello" }] });
+console.log(res.text, res.usage);
+for await (const e of model.stream({ messages: [{ role: "user", content: "Hello" }] })) {
+  if (e.type === "text_delta") process.stdout.write(e.text);
+  if (e.type === "done") console.log("\nfinish:", e.response.finishReason);
 }
 ```
 
-Or create a client without a model or network request, then select locally:
+```py
+# Python — OpenAI-compatible
+from conduit import connect
+client = connect(driver="openai-compatible", endpoint="http://localhost:1234/v1", credentials=None)
+print(client.list_models())
+model = client.model("my-model")
+res = model.generate(messages=[{"role": "user", "content": "Hello"}])
+print(res.text, res.usage)
+for ev in model.stream(messages=[{"role": "user", "content": "Hello"}]):
+    if ev["type"] == "text_delta": print(ev["text"], end="")
+```
 
+```rust
+// Rust — OpenAI-compatible (sync)
+use conduit::{connect, ClientConfig, GenerationRequest, Message, ContentPart, TextPart};
+let client = connect(ClientConfig { driver: "openai-compatible".into(), endpoint: "http://localhost:1234/v1".into(), ..Default::default() }).unwrap();
+println!("{:?}", client.list_models(None).unwrap());
+let model = client.model("my-model").unwrap();
+let res = model.generate(GenerationRequest { messages: vec![Message { role: "user".into(), content: vec![ContentPart::Text(TextPart { part_type: "text".into(), text: "Hello".into() })] }], ..Default::default() }).unwrap();
+println!("{} {:?}", res.text(), res.usage);
+for ev in model.stream(GenerationRequest { messages: vec![Message { role: "user".into(), content: vec![ContentPart::Text(TextPart { part_type: "text".into(), text: "Hello".into() })] }], ..Default::default() }).unwrap() { println!("{:?}", ev.unwrap()); }
+```
+
+Local Ollama (no key, explicit endpoint):
 ```ts
-const client = connect({ driver: "openai-compatible", endpoint: "http://localhost:1234/v1" });
-const model = client.model("my-model");
+connect({ driver: "ollama", endpoint: "http://localhost:11434" }).model("llama3").generate({ messages: [{ role: "user", content: "Hello" }] })
+```
+```py
+connect(driver="ollama", endpoint="http://localhost:11434").model("llama3").generate(messages=[{"role":"user","content":"Hello"}])
+```
+```rust
+connect(ClientConfig { driver: "ollama".into(), endpoint: "http://localhost:11434".into(), ..Default::default() }).unwrap().model("llama3").unwrap().generate(req).unwrap()
 ```
 
-Use Node 22.13+ and ESM. From the repository root:
+Explicit driver + endpoint always required. `credentials` is `Authorization: Bearer` (OpenAI/Ollama) or `x-api-key` (Anthropic) / `x-goog-api-key` (Gemini). `providerOptions` is the escape hatch for native fields; Conduit-owned fields (`model`, `messages`, `stream`, `tools`, `format`/`response_format`, etc.) are rejected even when equal. No automatic routing, retries, or tool execution — tools are transport-only (`inputSchema` → provider `parameters`/`parametersJsonSchema`, `id` preserved, never fabricated).
 
-```sh
-npm ci --prefix typescript
-npm test --prefix typescript
-CONDUIT_ENDPOINT=http://localhost:1234/v1 CONDUIT_MODEL=my-model node examples/typescript/generate.mjs
-```
+Structured output: `responseFormat: {type:"text"}` (omit), `{type:"json"}` (`json`/`application/json`), `{type:"json_schema", jsonSchema}` (Ollama direct schema, Gemini `responseJsonSchema`, OpenAI `response_format`). Anthropic structured output remains `UnsupportedCapabilityError`.
 
-Tests use only local mock HTTP servers and synthetic credentials. The example
-requires a running compatible endpoint. See the [TypeScript API](typescript/README.md)
-for options, errors, cancellation, and endpoint semantics.
+Errors are normalized `ConduitError` with `name` categories: `InvalidRequestError`, `AuthenticationError`, `AuthorizationError`, `ModelNotFoundError`, `RateLimitError`, `TimeoutError`, `ConnectionError`, `ProtocolError`, `ProviderError`, `UnsupportedCapabilityError`, `CancelledError`.
 
-Conduit connects to providers and normalizes generation, content, usage, and
-errors. Applications own conversation history. Discovery, transport-only
-tools, structured output, and additional drivers are future slices. Conduit does
-not provide agents, routing, fallback, RAG, memory, workflows, or retries.
+Timeout is one operation deadline (1..2147483647 ms), not per-chunk; pagination and streaming respect the same deadline. Cancellation via `signal`/`AbortSignal`/`AtomicBool`.
 
-The [language-neutral specification](spec/README.md) is the source of truth.
-TypeScript/JavaScript, Python, and Rust will share observable behavior with
-idiomatic APIs, one package per language. Initial driver targets remain Chat
-Completions, native Ollama, Anthropic Messages, and stateless Gemini Interactions.
+Spec is authoritative: [spec/README.md](spec/README.md). Conformance fixtures in [conformance/](conformance/).
 
-| Directory | Purpose |
+| Dir | Purpose |
 | --- | --- |
-| `spec/` | Common semantics and driver boundaries |
-| `conformance/` | Shared request, response, error, and byte-fragment stream fixtures |
-| `typescript/` | Working text-generation slice and local-server tests |
-| `python/`, `rust/` | Empty language project scaffolds |
-| `examples/` | Runnable JavaScript examples; other languages reserved |
+| `spec/` | Semantics, drivers |
+| `conformance/` | Request/response/stream/error fixtures |
+| `typescript/` | `conduit` npm package, `npm run build && node --test test/*.test.mjs` |
+| `python/` | `conduit` pip package, `PYTHONPATH=python:python/tests python3 -m unittest discover -s python/tests -v` (66 tests) |
+| `rust/` | `conduit` crate, `cargo test -- --include-ignored` (59 tests) |
+| `examples/` | Runnable TS/Python/Rust for OpenAI-compatible + Ollama |
 
-[Contributing](CONTRIBUTING.md) requires Ponytail for every task. Zero runtime
-dependencies; TypeScript is the only development dependency. Existing
-[MIT license](LICENSE) retained. Registry names/release configuration remain open.
+[Contributing](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) require exact lowercase `ponytail` for every task. License: MIT.
