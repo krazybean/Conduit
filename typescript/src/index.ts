@@ -3,6 +3,7 @@ import { object } from "./response.js";
 import { ollamaRequest, ollamaResponse, ollamaError, ollamaStream } from "./ollama.js";
 import { openaiStream } from "./openai-stream.js";
 import { anthropicRequest, anthropicResponse, anthropicError, anthropicStream } from "./anthropic.js";
+import { geminiRequest, encodeGeminiTools, encodeGeminiToolChoice, encodeGeminiFormat, geminiResponse, geminiError, geminiStream } from "./gemini.js";
 import { ConduitError } from "./errors.js";
 import type { Client, ClientConfig, GenerationRequest, GenerationResponse, JsonValue, ListModelsOptions, Model, ModelInfo, StreamEvent } from "./types.js";
 
@@ -18,7 +19,7 @@ const ownedFields = new Set([
 const protectedHeaders = new Set([
   "authorization", "proxy-authorization", "cookie", "host", "content-type", "content-length",
   "connection", "transfer-encoding", "upgrade", "trailer", "te", "keep-alive",
-  "x-api-key", "anthropic-version",
+  "x-api-key", "anthropic-version", "x-goog-api-key",
 ]);
 const requestFields = new Set([
   "messages", "maxOutputTokens", "temperature", "topP", "stop", "tools", "toolChoice", "responseFormat", "providerOptions", "signal", "timeout",
@@ -268,9 +269,15 @@ function encode(model: string, request: GenerationRequest, streaming: boolean, d
   if (driver === "anthropic" && responseFormat !== undefined) {
     throw new ConduitError("UnsupportedCapabilityError", "responseFormat is not supported for Anthropic.");
   }
-  const wireTools = driver === "anthropic" ? encodeToolsAnthropic(tools as import("./types.js").ToolDefinition[] | undefined) : encodeTools(tools as import("./types.js").ToolDefinition[] | undefined);
-  const wireToolChoice = encodeToolChoice(toolChoice, driver);
-  const wireFormat = driver === "anthropic" ? undefined : encodeResponseFormat(responseFormat, driver);
+  if (driver === "gemini" && tools !== undefined) {
+    // Gemini tool/function mapping – validate via geminiRequest, keep encode separate
+  }
+  const wireToolsGemini = encodeGeminiTools(tools as import("./types.js").ToolDefinition[] | undefined);
+  const wireToolChoiceGemini = encodeGeminiToolChoice(toolChoice);
+  const wireFormatGemini = encodeGeminiFormat(responseFormat);
+  const wireTools = driver === "anthropic" ? encodeToolsAnthropic(tools as import("./types.js").ToolDefinition[] | undefined) : driver === "gemini" ? wireToolsGemini : encodeTools(tools as import("./types.js").ToolDefinition[] | undefined);
+  const wireToolChoice = driver === "gemini" ? wireToolChoiceGemini : encodeToolChoice(toolChoice, driver);
+  const wireFormat = driver === "anthropic" ? undefined : driver === "gemini" ? wireFormatGemini : encodeResponseFormat(responseFormat, driver);
   if (driver === "ollama") {
     if (wireToolChoice !== undefined) {
       throw new ConduitError("UnsupportedCapabilityError", "toolChoice is not supported for Ollama; omit toolChoice or use providerOptions for native fields.");
@@ -279,6 +286,9 @@ function encode(model: string, request: GenerationRequest, streaming: boolean, d
   }
   if (driver === "anthropic") {
     return anthropicRequest(model, messages as { role: string; content: unknown[] }[], request, streaming, wireTools, wireToolChoice);
+  }
+  if (driver === "gemini") {
+    return geminiRequest(messages as { role: string; content: unknown[] }[], request, wireTools, wireToolChoice, wireFormat);
   }
   // OpenAI-compatible wire: map tool messages and tool calls
   const wireMessages = messages.map(m => {
@@ -321,7 +331,7 @@ export function connect(config: ClientConfig): Client;
 export function connect(config: ClientConfig & { model?: string }): Client | Model {
   if (!object(config)) invalid("Client configuration is required.");
   keys(config, new Set(["driver", "endpoint", "credentials", "headers", "timeout", "model"]));
-  if (config.driver !== "openai-compatible" && config.driver !== "ollama" && config.driver !== "anthropic") invalid("Unknown driver.");
+  if (config.driver !== "openai-compatible" && config.driver !== "ollama" && config.driver !== "anthropic" && config.driver !== "gemini") invalid("Unknown driver.");
   const driver = config.driver;
   if (typeof config.endpoint !== "string") invalid("endpoint must be an HTTP(S) API base URL.");
   let endpoint: URL;
@@ -330,9 +340,18 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
     invalid("endpoint must be an HTTP(S) API base URL without userinfo, query, or fragment.");
   }
   const basePath = endpoint.pathname.replace(/\/+$/, "");
-  endpoint.pathname = basePath + (driver === "ollama" ? "/api/chat" : driver === "anthropic" ? "/v1/messages" : "/chat/completions");
-  const url = endpoint.href;
-  const listUrl = `${endpoint.protocol}//${endpoint.host}${basePath}${driver === "ollama" ? "/api/tags" : driver === "anthropic" ? "/v1/models" : "/models"}`;
+  let url: string;
+  let listUrl: string;
+  if (driver === "gemini") {
+    endpoint.pathname = basePath + "/v1beta/models";
+    const base = endpoint.href.replace(/\/+$/, "");
+    url = base; // per-model suffix added in operation
+    listUrl = base;
+  } else {
+    endpoint.pathname = basePath + (driver === "ollama" ? "/api/chat" : driver === "anthropic" ? "/v1/messages" : "/chat/completions");
+    url = endpoint.href;
+    listUrl = `${endpoint.protocol}//${endpoint.host}${basePath}${driver === "ollama" ? "/api/tags" : driver === "anthropic" ? "/v1/models" : "/models"}`;
+  }
   const credentials = config.credentials;
   if (credentials !== undefined && (typeof credentials !== "string" || !/^[A-Za-z0-9._~+\/-]+=*$/.test(credentials))) invalid("credentials must be a nonempty bearer token.");
   timeoutValue(config.timeout);
@@ -354,6 +373,8 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
   if (driver === "anthropic") {
     if (credentials) headers.set("x-api-key", credentials);
     headers.set("anthropic-version", "2023-06-01");
+  } else if (driver === "gemini") {
+    if (credentials) headers.set("x-goog-api-key", credentials);
   } else if (credentials) headers.set("authorization", `Bearer ${credentials}`);
   // ponytail: known raw/URL-encoded secrets only; add encodings when a provider demonstrates them.
   const redactions = [...new Set(secrets.flatMap(secret => [secret, encodeURIComponent(secret)]))].sort((a, b) => b.length - a.length);
@@ -423,6 +444,28 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
       return info;
     });
   }
+  function normalizeGeminiModels(value: unknown): ModelInfo[] {
+    if (!object(value) || !Array.isArray((value as Record<string, unknown>).models)) protocolModels();
+    const models = (value as Record<string, unknown>).models as unknown[];
+    return models.map(entry => {
+      if (!object(entry) || typeof entry.name !== "string" || !entry.name.trim()) protocolModels();
+      const rawName = entry.name as string;
+      const id = rawName.startsWith("models/") ? rawName.slice("models/".length) : rawName;
+      if (!id.trim()) protocolModels();
+      const providerMetadata: Record<string, JsonValue> = {};
+      for (const [key, data] of Object.entries(entry)) {
+        if (key === "name" || key === "displayName") continue;
+        try { JSON.stringify(data); } catch { protocolModels(); }
+        if (data !== undefined) providerMetadata[key] = data as JsonValue;
+      }
+      const info: ModelInfo = { id: redact(id) };
+      if (typeof entry.displayName === "string" && entry.displayName.trim()) info.name = redact(entry.displayName);
+      // preserve full resource name in metadata if different
+      if (rawName !== id) providerMetadata.name = rawName as JsonValue;
+      if (Object.keys(providerMetadata).length) info.providerMetadata = providerMetadata;
+      return info;
+    });
+  }
   async function listModels(opts?: ListModelsOptions): Promise<ModelInfo[]> {
     // Read before narrowing via object() to avoid Record<string,unknown> widening.
     const rawTimeout = (opts as ListModelsOptions | undefined)?.timeout;
@@ -488,6 +531,43 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
         }
         protocolModels("Too many pagination pages.");
       }
+      if (driver === "gemini") {
+        const all: ModelInfo[] = [];
+        let pageToken: string | undefined;
+        const seenTokens = new Set<string>();
+        // ponytail: sequential pagination, guard non-progressing token; parallel would violate timeout.
+        for (let pages = 0; pages < 100; pages++) {
+          controller.signal.throwIfAborted();
+          const pageUrl = pageToken === undefined ? listUrl : `${listUrl}?pageToken=${encodeURIComponent(pageToken)}`;
+          if (pageToken !== undefined && seenTokens.has(pageToken)) protocolModels("Malformed pagination token.");
+          if (pageToken !== undefined) seenTokens.add(pageToken);
+          response = await fetch(pageUrl, { method: "GET", headers, signal: controller.signal, redirect: "manual" });
+          const rawRequestId = response.headers.get("x-request-id") ?? response.headers.get("request-id");
+          const pageRequestId = rawRequestId === null ? undefined : redact(rawRequestId);
+          if (requestId === undefined) requestId = pageRequestId;
+          if (!response.ok) {
+            const text = await response.text();
+            controller.signal.throwIfAborted();
+            throw geminiError(response.status, text, pageRequestId ?? requestId, redact);
+          }
+          const text = await response.text();
+          controller.signal.throwIfAborted();
+          let value: unknown;
+          try { value = JSON.parse(text); } catch { protocolModels("Provider returned invalid JSON."); }
+          if (!object(value) || !Array.isArray((value as Record<string, unknown>).models)) protocolModels();
+          const nextPageToken = (value as Record<string, unknown>).nextPageToken;
+          if (nextPageToken !== undefined && typeof nextPageToken !== "string") protocolModels("Malformed nextPageToken.");
+          const pageModels = normalizeGeminiModels(value);
+          all.push(...pageModels);
+          if (!nextPageToken) return all;
+          if (nextPageToken === pageToken) protocolModels("Malformed pagination: token did not advance.");
+          if (seenTokens.has(nextPageToken)) protocolModels("Malformed pagination: token cycle.");
+          pageToken = nextPageToken as string;
+          if (response.body && !response.body.locked) await response.body.cancel().catch(() => {});
+          response = undefined;
+        }
+        protocolModels("Too many pagination pages.");
+      }
       controller.signal.throwIfAborted();
       response = await fetch(listUrl, { method: "GET", headers, signal: controller.signal, redirect: "manual" });
       const rawRequestId = response.headers.get("x-request-id") ?? response.headers.get("request-id");
@@ -540,20 +620,22 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
     let result: GenerationResponse | undefined;
     try {
       controller.signal.throwIfAborted();
-      response = await fetch(url, { method: "POST", headers, body, signal: controller.signal, redirect: "manual" });
+      const fetchUrl = driver === "gemini" ? `${url}/${encodeURIComponent(id)}:${streaming ? "streamGenerateContent?alt=sse" : "generateContent"}` : url;
+      response = await fetch(fetchUrl, { method: "POST", headers, body, signal: controller.signal, redirect: "manual" });
       const rawRequestId = response.headers.get("x-request-id") ?? response.headers.get("request-id");
       requestId = rawRequestId === null ? undefined : redact(rawRequestId);
       if (!response.ok) {
         const text = await response.text();
         controller.signal.throwIfAborted();
-        throw driver === "ollama" ? ollamaError(response.status, text, requestId, redact, id) : driver === "anthropic" ? anthropicError(response.status, text, requestId, redact) : httpError(response.status, text, requestId, redact);
+        throw driver === "ollama" ? ollamaError(response.status, text, requestId, redact, id) : driver === "anthropic" ? anthropicError(response.status, text, requestId, redact) : driver === "gemini" ? geminiError(response.status, text, requestId, redact) : httpError(response.status, text, requestId, redact);
       }
       if (streaming) {
         const media = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
-        if (!response.body || !(driver === "ollama" ? ["application/x-ndjson", "application/ndjson", "application/json"].includes(media ?? "") : media === "text/event-stream")) {
+        if (!response.body || !(driver === "ollama" ? ["application/x-ndjson", "application/ndjson", "application/json"].includes(media ?? "") : driver === "gemini" ? media === "text/event-stream" : media === "text/event-stream")) {
           throw new ConduitError("ProtocolError", driver === "ollama" ? "Expected an NDJSON response." : "Expected a text/event-stream response.");
         }
-        const events = driver === "ollama" ? ollamaStream(response.body, requestId, redact) : driver === "anthropic" ? anthropicStream(response.body, requestId, redact) : openaiStream(response.body, requestId, redact);
+        const fullContentType = response.headers.get("content-type");
+        const events = driver === "ollama" ? ollamaStream(response.body, requestId, redact) : driver === "anthropic" ? anthropicStream(response.body, requestId, redact) : driver === "gemini" ? geminiStream(response.body, requestId, redact, fullContentType) : openaiStream(response.body, requestId, redact);
         for await (const event of events) {
           controller.signal.throwIfAborted();
           if (event.type === "done") { result = event.response; break; }
@@ -567,7 +649,7 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
         try { value = JSON.parse(text); } catch {
           throw new ConduitError("ProtocolError", "Provider returned invalid JSON.");
         }
-        result = driver === "ollama" ? ollamaResponse(value, requestId, redact) : driver === "anthropic" ? anthropicResponse(value, requestId, redact) : decode(value, requestId, redact);
+        result = driver === "ollama" ? ollamaResponse(value, requestId, redact) : driver === "anthropic" ? anthropicResponse(value, requestId, redact) : driver === "gemini" ? geminiResponse(value, requestId, redact) : decode(value, requestId, redact);
       }
     } catch (error) {
       if (controller.signal.aborted) throw controller.signal.reason;

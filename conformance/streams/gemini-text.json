@@ -1,0 +1,26 @@
+[
+  {
+    "id": "text",
+    "driver": "gemini",
+    "operation": "stream",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": { "content-type": "text/event-stream" },
+        "fragments_base64": [
+          "ZGF0YTogeyJjYW5kaWRhdGVzIjpbeyJjb250ZW50Ijp7InBhcnRzIjpbeyJ0ZXh0IjoiSGVsbG8gIn1dLCJyb2xlIjoibW9kZWwifSwiZmluaXNoUmVhc29uIjoiU1RPUCIsImluZGV4IjowfV0sInVzYWdlTWV0YWRhdGEiOnsicHJvbXB0VG9rZW5Db3VudCI6NCwiY2FuZGlkYXRlc1Rva2VuQ291bnQiOjF9fQoKZGF0YTogeyJjYW5kaWRhdGVzIjpbeyJjb250ZW50Ijp7InBhcnRzIjpbeyJ0ZXh0Ijoid29ybGQifV0sInJvbGUiOiJtb2RlbCJ9LCJmaW5pc2hSZWFzb24iOiJTVE9QIiwiaW5kZXgiOjB9XSwidXNhZ2VNZXRhZGF0YSI6eyJwcm9tcHRUb2tlbkNvdW50Ijo0LCJjYW5kaWRhdGVzVG9rZW5Db3VudCI6MiwidG90YWxUb2tlbkNvdW50Ijo2fX0KCg=="
+        ]
+      }
+    },
+    "expected": {
+      "events": [
+        { "type": "start" },
+        { "type": "text_delta", "index": 0, "text": "Hello " },
+        { "type": "text_delta", "index": 0, "text": "world" },
+        { "type": "usage", "usage": { "input_tokens": 4, "output_tokens": 1 } },
+        { "type": "usage", "usage": { "input_tokens": 4, "output_tokens": 2, "total_tokens": 6 } },
+        { "type": "done", "response": { "content": [{ "type": "text", "text": "Hello world" }], "finish_reason": "stop", "provider_metadata": { "finish_reason": "STOP" }, "usage": { "input_tokens": 4, "output_tokens": 2, "total_tokens": 6 } } }
+      ]
+    }
+  }
+]

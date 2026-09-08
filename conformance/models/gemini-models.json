@@ -1,0 +1,58 @@
+[
+  {
+    "id": "single",
+    "driver": "gemini",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "models": [
+            {
+              "name": "models/gemini-2.0-flash",
+              "displayName": "Gemini 2.0 Flash",
+              "supportedGenerationMethods": ["generateContent"]
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "models": [
+        {
+          "id": "gemini-2.0-flash",
+          "name": "Gemini 2.0 Flash",
+          "provider_metadata": {
+            "name": "models/gemini-2.0-flash",
+            "supportedGenerationMethods": ["generateContent"]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "paginated",
+    "driver": "gemini",
+    "operation": "list_models",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "models": [
+            { "name": "models/gemini-2.0-flash", "displayName": "Flash" },
+            { "name": "models/gemini-1.5-pro", "displayName": "Pro" }
+          ],
+          "nextPageToken": "token-123"
+        }
+      }
+    },
+    "expected": {
+      "models": [
+        { "id": "gemini-2.0-flash", "name": "Flash", "provider_metadata": { "name": "models/gemini-2.0-flash" } },
+        { "id": "gemini-1.5-pro", "name": "Pro", "provider_metadata": { "name": "models/gemini-1.5-pro" } }
+      ]
+    }
+  }
+]

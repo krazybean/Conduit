@@ -1,5 +1,5 @@
 export interface ClientConfig {
-  driver: "openai-compatible" | "ollama" | "anthropic";
+  driver: "openai-compatible" | "ollama" | "anthropic" | "gemini";
   /** OpenAI-compatible API base (including /v1), or Ollama server base. */
   endpoint: string;
   credentials?: string;
