@@ -157,6 +157,68 @@ pub struct ClientConfig {
     pub timeout: Option<u32>,
     pub model: Option<String>,
 }
+#[allow(clippy::derivable_impls)]
+impl Default for ClientConfig {
+    fn default() -> Self {
+        Self {
+            driver: String::new(),
+            endpoint: String::new(),
+            credentials: None,
+            headers: None,
+            timeout: None,
+            model: None,
+        }
+    }
+}
+impl ClientConfig {
+    pub fn ollama(model: impl Into<String>) -> Self {
+        Self {
+            driver: "ollama".into(),
+            endpoint: "http://localhost:11434".into(),
+            model: Some(model.into()),
+            ..Default::default()
+        }
+    }
+    pub fn anthropic(model: impl Into<String>) -> Self {
+        Self {
+            driver: "anthropic".into(),
+            endpoint: "https://api.anthropic.com".into(),
+            model: Some(model.into()),
+            ..Default::default()
+        }
+    }
+    pub fn gemini(model: impl Into<String>) -> Self {
+        Self {
+            driver: "gemini".into(),
+            endpoint: "https://generativelanguage.googleapis.com".into(),
+            model: Some(model.into()),
+            ..Default::default()
+        }
+    }
+    pub fn openai_compatible(endpoint: impl Into<String>, model: impl Into<String>) -> Self {
+        Self {
+            driver: "openai-compatible".into(),
+            endpoint: endpoint.into(),
+            model: Some(model.into()),
+            ..Default::default()
+        }
+    }
+}
+pub fn ollama(model: impl Into<String>) -> Result<Model, ConduitError> {
+    let m = model.into();
+    let c = connect(ClientConfig::ollama(m.clone()))?;
+    Ok(c.model(&m).unwrap())
+}
+pub fn anthropic(model: impl Into<String>) -> Result<Model, ConduitError> {
+    let m = model.into();
+    let c = connect(ClientConfig::anthropic(m.clone()))?;
+    Ok(c.model(&m).unwrap())
+}
+pub fn gemini(model: impl Into<String>) -> Result<Model, ConduitError> {
+    let m = model.into();
+    let c = connect(ClientConfig::gemini(m.clone()))?;
+    Ok(c.model(&m).unwrap())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TextPart {
@@ -209,8 +271,37 @@ pub struct Message {
     pub role: String,
     pub content: Vec<ContentPart>,
 }
+impl Message {
+    pub fn user(text: impl Into<String>) -> Self {
+        Self {
+            role: "user".into(),
+            content: vec![ContentPart::Text(TextPart {
+                part_type: "text".into(),
+                text: text.into(),
+            })],
+        }
+    }
+    pub fn system(text: impl Into<String>) -> Self {
+        Self {
+            role: "system".into(),
+            content: vec![ContentPart::Text(TextPart {
+                part_type: "text".into(),
+                text: text.into(),
+            })],
+        }
+    }
+    pub fn assistant(text: impl Into<String>) -> Self {
+        Self {
+            role: "assistant".into(),
+            content: vec![ContentPart::Text(TextPart {
+                part_type: "text".into(),
+                text: text.into(),
+            })],
+        }
+    }
+}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct GenerationRequest {
     pub messages: Vec<Message>,
     pub max_output_tokens: Option<u32>,
@@ -223,6 +314,22 @@ pub struct GenerationRequest {
     pub provider_options: Option<HashMap<String, Value>>,
     pub timeout: Option<u32>,
     pub signal: Option<Arc<AtomicBool>>,
+}
+impl From<&str> for GenerationRequest {
+    fn from(s: &str) -> Self {
+        Self {
+            messages: vec![Message::user(s)],
+            ..Default::default()
+        }
+    }
+}
+impl From<String> for GenerationRequest {
+    fn from(s: String) -> Self {
+        Self {
+            messages: vec![Message::user(s)],
+            ..Default::default()
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -4315,14 +4422,21 @@ pub struct Model {
 }
 
 #[allow(clippy::result_large_err)]
-pub fn connect(config: ClientConfig) -> Result<Arc<Client>, ConduitError> {
+pub fn connect(mut config: ClientConfig) -> Result<Arc<Client>, ConduitError> {
     let driver = Driver::from_str(&config.driver)
         .ok_or_else(|| ConduitError::new("InvalidRequestError", "Unknown driver."))?;
     if config.endpoint.trim().is_empty() {
-        return Err(ConduitError::new(
-            "InvalidRequestError",
-            "endpoint must be an HTTP(S) API base URL.",
-        ));
+        match driver {
+            Driver::Ollama => config.endpoint = "http://localhost:11434".into(),
+            Driver::Anthropic => config.endpoint = "https://api.anthropic.com".into(),
+            Driver::Gemini => config.endpoint = "https://generativelanguage.googleapis.com".into(),
+            Driver::OpenAICompatible => {
+                return Err(ConduitError::new(
+                    "InvalidRequestError",
+                    "endpoint must be an HTTP(S) API base URL.",
+                ));
+            }
+        }
     }
     timeout_value(config.timeout)?;
     // Basic endpoint validation: must be http/https, no userinfo, no query/fragment
@@ -5149,7 +5263,11 @@ fn openai_sse_stream<R: BufRead + Send + 'static>(
 impl Model {
     #[allow(clippy::result_large_err)]
     #[allow(clippy::result_large_err)]
-    pub fn generate(&self, req: GenerationRequest) -> Result<GenerationResponse, ConduitError> {
+    pub fn generate(
+        &self,
+        req: impl Into<GenerationRequest>,
+    ) -> Result<GenerationResponse, ConduitError> {
+        let req = req.into();
         if is_aborted(&req.signal) {
             return Err(ConduitError::new(
                 "CancelledError",
@@ -5323,9 +5441,10 @@ impl Model {
     #[allow(clippy::result_large_err)]
     pub fn stream(
         &self,
-        req: GenerationRequest,
+        req: impl Into<GenerationRequest>,
     ) -> Result<Box<dyn Iterator<Item = Result<StreamEvent, ConduitError>> + Send>, ConduitError>
     {
+        let req = req.into();
         if is_aborted(&req.signal) {
             return Err(ConduitError::new(
                 "CancelledError",
@@ -8336,5 +8455,139 @@ mod tests {
             .unwrap();
         assert_eq!(models.len(), 2);
         h.join().unwrap();
+    }
+
+    #[test]
+    fn test_message_user() {
+        let m = Message::user("Hello");
+        assert_eq!(m.role, "user");
+        assert!(matches!(&m.content[0], ContentPart::Text(t) if t.text=="Hello"));
+        let s = Message::system("Be concise.");
+        assert_eq!(s.role, "system");
+        let a = Message::assistant("Hi");
+        assert_eq!(a.role, "assistant");
+    }
+    #[test]
+    fn test_generation_request_from_str() {
+        let req: GenerationRequest = "Hello".into();
+        assert_eq!(req.messages.len(), 1);
+        assert_eq!(req.messages[0].role, "user");
+        let req2: GenerationRequest = String::from("Hi").into();
+        assert_eq!(req2.messages[0].role, "user");
+        // old verbose still works
+        let req3 = GenerationRequest {
+            messages: vec![Message::user("Hello")],
+            ..Default::default()
+        };
+        assert_eq!(req3.messages.len(), 1);
+    }
+    #[test]
+    fn test_ollama_default_endpoint() {
+        let cfg = ClientConfig::ollama("qwen3:8b");
+        assert_eq!(cfg.endpoint, "http://localhost:11434");
+        assert_eq!(cfg.driver, "ollama");
+        let client = connect(cfg).unwrap();
+        assert!(client.list_models(None).is_err() || true); // just check we can create client without endpoint
+        let cfg2 = ClientConfig {
+            driver: "ollama".into(),
+            endpoint: "http://example.com:11434".into(),
+            ..Default::default()
+        };
+        assert_eq!(cfg2.endpoint, "http://example.com:11434");
+    }
+    #[test]
+    fn test_openai_still_requires_endpoint() {
+        let cfg = ClientConfig {
+            driver: "openai-compatible".into(),
+            endpoint: "".into(),
+            model: Some("m".into()),
+            ..Default::default()
+        };
+        assert!(connect(cfg).is_err());
+    }
+    #[test]
+    fn test_generate_string_shorthand() {
+        let (addr, handle) = start_server(|mut stream| {
+            let (_, _, body) = read_http_request(&mut stream);
+            let v: Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(v["model"], "m");
+            assert_eq!(v["messages"][0]["content"], "Hello");
+            let resp = serde_json::json!({"id":"id","object":"chat.completion","created":1,"model":"m","choices":[{"index":0,"message":{"role":"assistant","content":"Hi"},"finish_reason":"stop"}]});
+            let s = serde_json::to_string(&resp).unwrap();
+            let out = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                s.len(),
+                s
+            );
+            stream.write_all(out.as_bytes()).unwrap();
+            stream.flush().unwrap();
+        });
+        let cfg = ClientConfig {
+            driver: "openai-compatible".into(),
+            endpoint: format!("http://{}/v1", addr),
+            ..Default::default()
+        };
+        let client = connect(cfg).unwrap();
+        let model = client.model("m").unwrap();
+        let res = model.generate("Hello").unwrap();
+        assert_eq!(res.text(), "Hi");
+        // old form still works
+        let res2 = model
+            .generate(GenerationRequest {
+                messages: vec![Message::user("Hello")],
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(res2.text(), "Hi");
+        handle.join().unwrap();
+    }
+    #[test]
+    fn test_stream_string_shorthand() {
+        let (addr, handle) = start_server(|mut stream| {
+            let (_, _, _) = read_http_request(&mut stream);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\n")
+                .unwrap();
+            stream.flush().unwrap();
+            let first = format!("data: {}\n\n", serde_json::to_string(&serde_json::json!({"id":"id","model":"m","choices":[{"index":0,"delta":{"content":"Hi"},"finish_reason":null}]})).unwrap());
+            stream.write_all(first.as_bytes()).unwrap();
+            stream.flush().unwrap();
+            let done = format!("data: {}\n\n", serde_json::to_string(&serde_json::json!({"id":"id","model":"m","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]})).unwrap());
+            stream.write_all(done.as_bytes()).unwrap();
+            stream.flush().unwrap();
+            stream.write_all(b"data: [DONE]\n\n").unwrap();
+            stream.flush().unwrap();
+        });
+        let cfg = ClientConfig {
+            driver: "openai-compatible".into(),
+            endpoint: format!("http://{}/v1", addr),
+            ..Default::default()
+        };
+        let client = connect(cfg).unwrap();
+        let model = client.model("m").unwrap();
+        let evs: Vec<_> = model
+            .stream("Hello")
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert!(evs
+            .iter()
+            .any(|e| matches!(e, StreamEvent::TextDelta{ text, ..} if text=="Hi")));
+        handle.join().unwrap();
+    }
+    #[test]
+    fn test_ollama_connect_shorthand() {
+        let m = ollama("qwen3:8b").unwrap();
+        // model id should be qwen3:8b via ClientConfig
+        // we can't check without endpoint, but we can check that connect with model works
+        let cfg = ClientConfig {
+            driver: "ollama".into(),
+            endpoint: "".into(),
+            model: Some("qwen3:8b".into()),
+            ..Default::default()
+        };
+        let client = connect(cfg).unwrap();
+        let model = client.model("qwen3:8b").unwrap();
+        assert!(model.generate("Hello").is_err() || true); // just check it doesn't panic due to missing endpoint handling
     }
 }

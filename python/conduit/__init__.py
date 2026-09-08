@@ -278,6 +278,32 @@ class GenerationResponse:
     def tool_calls(self) -> List[Dict[str, Any]]:
         return [p for p in self.content if p.get("type") == "tool_call"]
 
+    def __getitem__(self, key: str) -> Any:
+        if key == "id": return self.id
+        if key == "model": return self.model
+        if key == "content": return self.content
+        if key == "finish_reason": return self.finish_reason
+        if key == "usage": return self.usage
+        if key == "provider_metadata": return self.provider_metadata
+        if key == "text": return self.text
+        if key == "tool_calls": return self.tool_calls
+        raise KeyError(key)
+
+    def __contains__(self, key: object) -> bool:
+        return key in ("id", "model", "content", "finish_reason", "usage", "provider_metadata", "text", "tool_calls")
+
+    def get(self, key: str, default: Any = None) -> Any:
+        try:
+            return self.__getitem__(key)
+        except KeyError:
+            return default
+
+    def keys(self):
+        return ("id", "model", "content", "finish_reason", "usage", "provider_metadata", "text", "tool_calls")
+
+    def __iter__(self):
+        return iter(self.keys())
+
     def __repr__(self) -> str:
         return f"GenerationResponse(id={self.id!r}, finish_reason={self.finish_reason!r}, text={self.text!r})"
 
@@ -2563,23 +2589,24 @@ class Model:
         self._client = client
         self._model_id = model_id
 
-    def generate(self, request: Optional[Dict[str, Any]] = None, **kwargs: Any) -> GenerationResponse:
-        if request is None:
-            request = dict(kwargs) if kwargs else {}
-        elif kwargs:
-            if not isinstance(request, dict):
+    def _norm(self, request: Any, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        if isinstance(request, str):
+            if kwargs:
                 _invalid("A generation request is required.")
+            return {"messages": [{"role": "user", "content": request}]}
+        if request is None:
+            return dict(kwargs) if kwargs else {}
+        if not isinstance(request, dict):
+            _invalid("A generation request is required.")
+        if kwargs:
             request = {**request, **kwargs}
-        return self._client._generate(self._model_id, request, False)
+        return request
 
-    def stream(self, request: Optional[Dict[str, Any]] = None, **kwargs: Any) -> Iterator[Dict[str, Any]]:
-        if request is None:
-            request = dict(kwargs) if kwargs else {}
-        elif kwargs:
-            if not isinstance(request, dict):
-                _invalid("A generation request is required.")
-            request = {**request, **kwargs}
-        return self._client._stream(self._model_id, request)
+    def generate(self, request: Optional[Any] = None, **kwargs: Any) -> GenerationResponse:
+        return self._client._generate(self._model_id, self._norm(request, kwargs), False)
+
+    def stream(self, request: Optional[Any] = None, **kwargs: Any) -> Iterator[Dict[str, Any]]:
+        return self._client._stream(self._model_id, self._norm(request, kwargs))
 
     def __repr__(self) -> str:
         return f"Model(id={self._model_id!r})"
@@ -3140,6 +3167,12 @@ def connect(config: Optional[Dict[str, Any]] = None, **kwargs: Any) -> Any:
     if driver not in ("openai-compatible", "ollama", "anthropic", "gemini"):
         raise ConduitError("InvalidRequestError", "Unknown driver.")
     endpoint_str = config.get("endpoint")
+    if endpoint_str is None:
+        defaults = {"ollama": "http://localhost:11434", "anthropic": "https://api.anthropic.com", "gemini": "https://generativelanguage.googleapis.com"}
+        if driver == "openai-compatible":
+            raise ConduitError("InvalidRequestError", "endpoint must be an HTTP(S) API base URL.")
+        endpoint_str = defaults[driver]
+        config["endpoint"] = endpoint_str
     if not isinstance(endpoint_str, str):
         raise ConduitError("InvalidRequestError", "endpoint must be an HTTP(S) API base URL.")
     try:

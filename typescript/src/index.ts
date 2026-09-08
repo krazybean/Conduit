@@ -179,17 +179,22 @@ function encodeResponseFormat(value: unknown, driver: ClientConfig["driver"]): u
   };
 }
 
-function encode(model: string, request: GenerationRequest, streaming: boolean, driver: ClientConfig["driver"]): string {
-  if (!object(request)) invalid("A generation request is required.");
-  if (Object.keys(request).some(key => unsupportedFields.has(key))) {
+function normalizeRequest(req: GenerationRequest | string): GenerationRequest {
+  if (typeof req === "string") return { messages: [{ role: "user", content: req }] } as GenerationRequest;
+  return req;
+}
+function encode(model: string, request: GenerationRequest | string, streaming: boolean, driver: ClientConfig["driver"]): string {
+  const normalized = normalizeRequest(request as GenerationRequest | string);
+  if (!object(normalized)) invalid("A generation request is required.");
+  if (Object.keys(normalized).some(key => unsupportedFields.has(key))) {
     throw new ConduitError("UnsupportedCapabilityError", streaming ? "Only text streaming is implemented." : "Only non-streaming text generation is implemented.");
   }
   keys(request, requestFields);
-  if (!Array.isArray(request.messages) || request.messages.length === 0) invalid("messages must be a nonempty array.");
-  validateTools(request.tools);
-  validateToolChoice(request.toolChoice, request.tools as readonly unknown[] | undefined);
-  validateResponseFormat(request.responseFormat);
-  const messages = Array.from(request.messages, message => {
+  if (!Array.isArray(normalized.messages) || normalized.messages.length === 0) invalid("messages must be a nonempty array.");
+  validateTools(normalized.tools);
+  validateToolChoice(normalized.toolChoice, normalized.tools as readonly unknown[] | undefined);
+  validateResponseFormat(normalized.responseFormat);
+  const messages = Array.from(normalized.messages, message => {
     if (!object(message)) invalid("Each message must be an object.");
     keys(message, new Set(["role", "content"]));
     const role = message.role as string;
@@ -245,7 +250,7 @@ function encode(model: string, request: GenerationRequest, streaming: boolean, d
     if (role === "tool" && hasText) invalid("Tool messages must not contain text parts; use tool_result.");
     return { role, content };
   });
-  const { maxOutputTokens, temperature, topP, stop, providerOptions, tools, toolChoice, responseFormat } = request;
+  const { maxOutputTokens, temperature, topP, stop, providerOptions, tools, toolChoice, responseFormat } = normalized;
   if (maxOutputTokens !== undefined && (!Number.isSafeInteger(maxOutputTokens) || (driver === "anthropic" ? maxOutputTokens < 0 : maxOutputTokens < 1))) {
     invalid(driver === "anthropic" ? "maxOutputTokens must be a nonnegative safe integer." : "maxOutputTokens must be a positive safe integer.");
   }
@@ -282,10 +287,10 @@ function encode(model: string, request: GenerationRequest, streaming: boolean, d
     if (wireToolChoice !== undefined) {
       throw new ConduitError("UnsupportedCapabilityError", "toolChoice is not supported for Ollama; omit toolChoice or use providerOptions for native fields.");
     }
-    return ollamaRequest(model, messages as { role: unknown; content: unknown[] }[], request, streaming, wireTools, undefined, wireFormat);
+    return ollamaRequest(model, messages as { role: unknown; content: unknown[] }[], normalized, streaming, wireTools, undefined, wireFormat);
   }
   if (driver === "anthropic") {
-    return anthropicRequest(model, messages as { role: string; content: unknown[] }[], request, streaming, wireTools, wireToolChoice);
+    return anthropicRequest(model, messages as { role: string; content: unknown[] }[], normalized, streaming, wireTools, wireToolChoice);
   }
   if (driver === "gemini") {
     return geminiRequest(messages as { role: string; content: unknown[] }[], request, wireTools, wireToolChoice, wireFormat);
@@ -333,6 +338,12 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
   keys(config, new Set(["driver", "endpoint", "credentials", "headers", "timeout", "model"]));
   if (config.driver !== "openai-compatible" && config.driver !== "ollama" && config.driver !== "anthropic" && config.driver !== "gemini") invalid("Unknown driver.");
   const driver = config.driver;
+  const defaults: Record<string, string> = { ollama: "http://localhost:11434", anthropic: "https://api.anthropic.com", gemini: "https://generativelanguage.googleapis.com" };
+  const rawEndpoint = (config as Record<string, unknown>).endpoint as string | undefined;
+  if (rawEndpoint === undefined) {
+    if (driver === "openai-compatible") invalid("endpoint must be an HTTP(S) API base URL.");
+    (config as Record<string, unknown>).endpoint = defaults[driver];
+  }
   if (typeof config.endpoint !== "string") invalid("endpoint must be an HTTP(S) API base URL.");
   let endpoint: URL;
   try { endpoint = new URL(config.endpoint); } catch { invalid("endpoint must be an HTTP(S) API base URL."); }
@@ -604,11 +615,12 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
       if (response?.body && !response.body.locked) await response.body.cancel().catch(() => {});
     }
   }
-  async function* operation(id: string, request: GenerationRequest, streaming: boolean): AsyncGenerator<StreamEvent> {
-    const body = encode(id, request, streaming, driver);
-    const timeout = request.timeout ?? defaultTimeout;
-    timeoutValue(request.timeout);
-    const signal = request.signal;
+  async function* operation(id: string, request: GenerationRequest | string, streaming: boolean): AsyncGenerator<StreamEvent> {
+    const normalized = normalizeRequest(request);
+    const body = encode(id, normalized, streaming, driver);
+    const timeout = normalized.timeout ?? defaultTimeout;
+    timeoutValue(normalized.timeout);
+    const signal = normalized.signal;
     if (signal !== undefined && !(signal instanceof AbortSignal)) invalid("signal must be an AbortSignal.");
     const controller = new AbortController();
     const cancel = () => controller.abort(new ConduitError("CancelledError", "Request cancelled by caller."));
@@ -679,13 +691,13 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
     model(id: string): Model {
       if (typeof id !== "string" || !id.trim()) invalid("model must be a nonempty string.");
       return Object.freeze({
-        async generate(request: GenerationRequest): Promise<GenerationResponse> {
+        async generate(request: GenerationRequest | string): Promise<GenerationResponse> {
           for await (const event of operation(id, request, false)) {
             if (event.type === "done") return event.response;
           }
           throw new ConduitError("ProtocolError", "Missing generation response.");
         },
-        stream(request: GenerationRequest): AsyncGenerator<StreamEvent> {
+        stream(request: GenerationRequest | string): AsyncGenerator<StreamEvent> {
           return operation(id, request, true);
         },
       });

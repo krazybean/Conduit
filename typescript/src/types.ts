@@ -1,7 +1,7 @@
 export interface ClientConfig {
   driver: "openai-compatible" | "ollama" | "anthropic" | "gemini";
-  /** OpenAI-compatible API base (including /v1), or Ollama server base. */
-  endpoint: string;
+  /** API base; required for openai-compatible, defaults for ollama/anthropic/gemini. */
+  endpoint?: string;
   credentials?: string;
   headers?: Record<string, string>;
   /** Entire operation deadline in milliseconds; omitted means no Conduit deadline. */
@@ -104,6 +104,6 @@ export type StreamEvent =
   | { type: "done"; response: GenerationResponse };
 
 export interface Model {
-  generate(request: GenerationRequest): Promise<GenerationResponse>;
-  stream(request: GenerationRequest): AsyncGenerator<StreamEvent>;
+  generate(request: GenerationRequest | string): Promise<GenerationResponse>;
+  stream(request: GenerationRequest | string): AsyncGenerator<StreamEvent>;
 }
