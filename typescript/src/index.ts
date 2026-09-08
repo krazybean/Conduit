@@ -7,7 +7,7 @@ import type { Client, ClientConfig, GenerationRequest, GenerationResponse, JsonV
 
 export { ConduitError } from "./errors.js";
 export type { ErrorCode, ErrorDetails } from "./errors.js";
-export type { Client, ClientConfig, GenerationRequest, GenerationResponse, JsonValue, ListModelsOptions, Message, Model, ModelInfo, StreamEvent, TextPart, Usage } from "./types.js";
+export type { Client, ClientConfig, ContentPart, GenerationRequest, GenerationResponse, JsonValue, ListModelsOptions, Message, Model, ModelInfo, StreamEvent, TextPart, ToolCallPart, ToolChoice, ToolDefinition, ToolResultPart, Usage } from "./types.js";
 
 const ownedFields = new Set([
   "model", "messages", "stream", "stream_options", "max_tokens", "max_completion_tokens",
@@ -19,9 +19,9 @@ const protectedHeaders = new Set([
   "connection", "transfer-encoding", "upgrade", "trailer", "te", "keep-alive",
 ]);
 const requestFields = new Set([
-  "messages", "maxOutputTokens", "temperature", "topP", "stop", "providerOptions", "signal", "timeout",
+  "messages", "maxOutputTokens", "temperature", "topP", "stop", "tools", "toolChoice", "providerOptions", "signal", "timeout",
 ]);
-const unsupportedFields = new Set(["tools", "toolChoice", "responseFormat", "stream", "reasoning", "vision"]);
+const unsupportedFields = new Set(["responseFormat", "stream", "reasoning", "vision"]);
 
 function invalid(message: string): never {
   throw new ConduitError("InvalidRequestError", message);
@@ -60,6 +60,67 @@ function json(value: unknown, parents = new Set<object>()): void {
   parents.delete(value);
 }
 
+function validateTools(tools: unknown): void {
+  if (tools === undefined) return;
+  if (!Array.isArray(tools) || tools.length === 0) invalid("tools must be a nonempty array.");
+  const names = new Set<string>();
+  for (const tool of tools) {
+    if (!object(tool)) invalid("Each tool must be an object.");
+    keys(tool, new Set(["name", "description", "inputSchema"]));
+    if (typeof tool.name !== "string" || !tool.name.trim()) invalid("Tool name must be a nonempty string.");
+    if (names.has(tool.name)) invalid("Tool names must be unique.");
+    names.add(tool.name);
+    if (tool.description !== undefined && typeof tool.description !== "string") invalid("Tool description must be a string.");
+    if (!object(tool.inputSchema) && !Array.isArray(tool.inputSchema) && typeof tool.inputSchema !== "boolean") {
+      // JSON Schema must be JSON-compatible; allow any JSON value but require acyclic
+      try { json(tool.inputSchema); } catch { invalid("Tool inputSchema must be JSON-compatible."); }
+    } else {
+      try { json(tool.inputSchema); } catch (error) { if (error instanceof ConduitError) throw error; invalid("Tool inputSchema must be JSON-compatible."); }
+    }
+  }
+}
+
+function validateToolChoice(choice: unknown, tools: readonly unknown[] | undefined): void {
+  if (choice === undefined) return;
+  if (typeof choice === "string") {
+    if (!["auto", "none", "required"].includes(choice)) {
+      // Allow named tool as string shorthand
+      if (!choice.trim()) invalid("toolChoice name must be a nonempty string.");
+      if (!tools || !(tools as readonly { name: string }[]).some(t => t.name === choice)) invalid("toolChoice name must match a supplied tool.");
+      return;
+    }
+    return;
+  }
+  if (!object(choice)) invalid("toolChoice must be \"auto\", \"none\", \"required\", or { name }.");
+  keys(choice, new Set(["name"]));
+  if (typeof choice.name !== "string" || !choice.name.trim()) invalid("toolChoice name must be a nonempty string.");
+  if (!tools || !(tools as readonly { name: string }[]).some(t => t.name === choice.name)) invalid("toolChoice name must match a supplied tool.");
+}
+
+function encodeTools(tools: readonly import("./types.js").ToolDefinition[] | undefined): unknown[] | undefined {
+  if (tools === undefined) return undefined;
+  return tools.map(t => ({
+    type: "function",
+    function: {
+      name: t.name,
+      ...(t.description !== undefined && { description: t.description }),
+      parameters: t.inputSchema,
+    },
+  }));
+}
+
+function encodeToolChoice(choice: unknown): unknown {
+  if (choice === undefined) return undefined;
+  if (typeof choice === "string") {
+    if (["auto", "none", "required"].includes(choice)) return choice;
+    return { type: "function", function: { name: choice } };
+  }
+  if (object(choice) && typeof choice.name === "string") {
+    return { type: "function", function: { name: choice.name } };
+  }
+  return choice;
+}
+
 function encode(model: string, request: GenerationRequest, streaming: boolean, driver: ClientConfig["driver"]): string {
   if (!object(request)) invalid("A generation request is required.");
   if (Object.keys(request).some(key => unsupportedFields.has(key))) {
@@ -67,25 +128,65 @@ function encode(model: string, request: GenerationRequest, streaming: boolean, d
   }
   keys(request, requestFields);
   if (!Array.isArray(request.messages) || request.messages.length === 0) invalid("messages must be a nonempty array.");
+  validateTools(request.tools);
+  validateToolChoice(request.toolChoice, request.tools as readonly unknown[] | undefined);
   const messages = Array.from(request.messages, message => {
     if (!object(message)) invalid("Each message must be an object.");
     keys(message, new Set(["role", "content"]));
-    if (message.role === "tool") throw new ConduitError("UnsupportedCapabilityError", "Tool messages are not implemented.");
-    if (!["system", "user", "assistant"].includes(message.role as string)) invalid("Invalid text message role.");
-    const parts = typeof message.content === "string" ? [{ type: "text", text: message.content }] : message.content;
-    if (!Array.isArray(parts)) invalid("Message content must be a string or text-part array.");
-    const content = Array.from(parts, part => {
+    const role = message.role as string;
+    if (!["system", "user", "assistant", "tool"].includes(role)) invalid("Invalid message role.");
+    const rawParts = typeof message.content === "string" ? [{ type: "text", text: message.content }] : message.content;
+    if (!Array.isArray(rawParts)) invalid("Message content must be a string or text-part array.");
+    if (rawParts.length === 0) invalid("Message content must be nonempty.");
+    const content: unknown[] = [];
+    let hasToolCall = false;
+    let hasToolResult = false;
+    let hasText = false;
+    for (const part of rawParts) {
       if (!object(part)) invalid("Invalid content part.");
-      if (["image", "tool_call", "tool_result"].includes(part.type as string)) {
-        throw new ConduitError("UnsupportedCapabilityError", "Only text content is implemented.");
+      const type = part.type as string;
+      if (type === "text") {
+        keys(part, new Set(["type", "text"]));
+        if (typeof part.text !== "string") invalid("Invalid text content part.");
+        hasText = true;
+        content.push({ type: "text", text: part.text });
+      } else if (type === "tool_call") {
+        keys(part, new Set(["type", "id", "name", "arguments"]));
+        if (typeof part.name !== "string" || !part.name.trim()) invalid("Tool call name must be a nonempty string.");
+        if (part.id !== undefined && typeof part.id !== "string") invalid("Tool call id must be a string.");
+        try { json(part.arguments); } catch { invalid("Tool call arguments must be JSON-compatible."); }
+        hasToolCall = true;
+        content.push({ type: "tool_call", ...(part.id !== undefined && { id: part.id }), name: part.name, arguments: part.arguments });
+      } else if (type === "tool_result") {
+        keys(part, new Set(["type", "callId", "name", "content"]));
+        if (part.callId !== undefined && typeof part.callId !== "string") invalid("Tool result callId must be a string.");
+        if (part.name !== undefined && typeof part.name !== "string") invalid("Tool result name must be a string.");
+        if (typeof part.content !== "string" && !Array.isArray(part.content)) invalid("Tool result content must be a string or text-part array.");
+        const inner = typeof part.content === "string" ? [{ type: "text", text: part.content }] : part.content as unknown[];
+        if (!Array.isArray(inner)) invalid("Tool result content must be a string or text-part array.");
+        // Validate inner text parts
+        for (const p of inner) {
+          if (!object(p)) invalid("Invalid tool result content part.");
+          keys(p, new Set(["type", "text"]));
+          if (p.type !== "text" || typeof p.text !== "string") invalid("Tool result content must be text.");
+        }
+        hasToolResult = true;
+        content.push({ type: "tool_result", ...(part.callId !== undefined && { callId: part.callId }), ...(part.name !== undefined && { name: part.name }), content: part.content });
+      } else if (type === "image") {
+        throw new ConduitError("UnsupportedCapabilityError", "Image content is not implemented.");
+      } else {
+        invalid("Invalid content part type.");
       }
-      keys(part, new Set(["type", "text"]));
-      if (part.type !== "text" || typeof part.text !== "string") invalid("Invalid text content part.");
-      return { type: "text", text: part.text };
-    });
-    return { role: message.role, content };
+    }
+    // Role validation
+    if (role === "tool" && !hasToolResult) invalid("Tool messages must contain a tool_result part.");
+    if (role !== "tool" && hasToolResult) invalid("Only tool messages may contain tool_result parts.");
+    if (hasToolCall && role !== "assistant") invalid("Only assistant messages may contain tool_call parts.");
+    if (role === "tool" && hasToolCall) invalid("Tool messages must not contain tool_call parts.");
+    if (role === "tool" && hasText) invalid("Tool messages must not contain text parts; use tool_result.");
+    return { role, content };
   });
-  const { maxOutputTokens, temperature, topP, stop, providerOptions } = request;
+  const { maxOutputTokens, temperature, topP, stop, providerOptions, tools, toolChoice } = request;
   if (maxOutputTokens !== undefined && (!Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1)) invalid("maxOutputTokens must be a positive safe integer.");
   if (temperature !== undefined && (!Number.isFinite(temperature) || temperature < 0 || (driver === "openai-compatible" && temperature > 2))) invalid(driver === "ollama" ? "temperature must be finite and nonnegative." : "temperature must be between 0 and 2.");
   if (topP !== undefined && (!Number.isFinite(topP) || topP < 0 || topP > 1)) invalid("topP must be between 0 and 1.");
@@ -99,9 +200,48 @@ function encode(model: string, request: GenerationRequest, streaming: boolean, d
       invalid("providerOptions must contain plain JSON data.");
     }
   }
-  if (driver === "ollama") return ollamaRequest(model, messages, request, streaming);
-  return JSON.stringify({ ...providerOptions, model, messages, stream: streaming,
-    max_tokens: maxOutputTokens, temperature, top_p: topP, stop: stop === undefined ? undefined : Array.from(stop) });
+  // If tools were provided, ensure providerOptions does not also contain raw tools (already reserved), but allow passthrough of native extras
+  const wireTools = encodeTools(tools as import("./types.js").ToolDefinition[] | undefined);
+  const wireToolChoice = encodeToolChoice(toolChoice);
+  if (driver === "ollama") {
+    if (wireToolChoice !== undefined) {
+      throw new ConduitError("UnsupportedCapabilityError", "toolChoice is not supported for Ollama; omit toolChoice or use providerOptions for native fields.");
+    }
+    return ollamaRequest(model, messages as { role: unknown; content: unknown[] }[], request, streaming, wireTools, undefined);
+  }
+  // OpenAI-compatible wire: map tool messages and tool calls
+  const wireMessages = messages.map(m => {
+    const role = m.role as string;
+    const parts = m.content as unknown[];
+    if (role === "tool") {
+      const tr = parts.find(p => (p as Record<string, unknown>).type === "tool_result") as Record<string, unknown> | undefined;
+      if (!tr) invalid("Tool message must contain tool_result.");
+      const innerContent = tr.content as unknown;
+      const text = typeof innerContent === "string" ? innerContent as string : ((innerContent as unknown[]).map((q: unknown) => (q as Record<string, unknown>).text as string).join(""));
+      const out: Record<string, unknown> = { role: "tool", content: text };
+      if (typeof tr.callId === "string" && tr.callId) out.tool_call_id = tr.callId;
+      else if (typeof tr.name === "string" && tr.name) out.tool_call_id = tr.name;
+      return out;
+    }
+    const textParts = parts.filter(p => (p as Record<string, unknown>).type === "text") as unknown[];
+    const toolCalls = parts.filter(p => (p as Record<string, unknown>).type === "tool_call") as unknown[];
+    if (toolCalls.length) {
+      const wireToolCalls = toolCalls.map((tc: unknown) => {
+        const c = tc as Record<string, unknown>;
+        return { id: c.id ?? `call_${Math.random().toString(36).slice(2)}`, type: "function", function: { name: c.name, arguments: JSON.stringify(c.arguments) } };
+      });
+      const content = textParts.length ? textParts.map((p: unknown) => (p as Record<string, unknown>).text as string).join("") : null;
+      // Preserve array form for text-only expectations? For tool calls, use string/null per OpenAI spec
+      return { role: "assistant", content, tool_calls: wireToolCalls };
+    }
+    // No tool calls: keep array-of-text-parts shape for backward compat with existing fixtures
+    return m;
+  });
+  return JSON.stringify({ ...providerOptions, model, messages: wireMessages, stream: streaming,
+    max_tokens: maxOutputTokens, temperature, top_p: topP, stop: stop === undefined ? undefined : Array.from(stop),
+    ...(wireTools !== undefined && { tools: wireTools }),
+    ...(wireToolChoice !== undefined && { tool_choice: wireToolChoice }),
+  });
 }
 
 export function connect(config: ClientConfig & { model: string }): Model;

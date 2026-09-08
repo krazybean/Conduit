@@ -131,9 +131,12 @@ test("input validation and unsupported features fail before I/O", async t => {
     { providerOptions: { x: undefined } }, { providerOptions: { x: () => 1 } }, { providerOptions: { x: 1n } },
     { providerOptions: { x: Infinity } }, { providerOptions: { x: new Date() } }, { providerOptions: { x: new Array(1) } },
   ]) await assert.rejects(model(endpoint).generate({ ...input, ...change }), isError("InvalidRequestError"));
-  for (const change of [{ tools: [] }, { responseFormat: { type: "json" } }, { stream: true }, { messages: [{ role: "tool", content: "hello" }] }, { messages: [{ role: "user", content: [{ type: "image", url: "https://invalid.example" }] }] }]) {
+  for (const change of [{ responseFormat: { type: "json" } }, { stream: true }, { messages: [{ role: "user", content: [{ type: "image", url: "https://invalid.example" }] }] }]) {
     await assert.rejects(model(endpoint).generate({ ...input, ...change }), isError("UnsupportedCapabilityError"));
   }
+  // tools: [] is now InvalidRequestError (empty array), tool message with string content is InvalidRequestError
+  await assert.rejects(model(endpoint).generate({ ...input, tools: [] }), isError("InvalidRequestError"));
+  await assert.rejects(model(endpoint).generate({ ...input, messages: [{ role: "tool", content: "hello" }] }), isError("InvalidRequestError"));
   assert.equal(requests.length, 0);
 });
 

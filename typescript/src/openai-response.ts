@@ -23,22 +23,49 @@ export function decode(value: unknown, requestId: string | undefined, redact: (t
   if (!object(value) || !Array.isArray(value.choices) || value.choices.length !== 1) protocol();
   const choice: unknown = value.choices[0];
   if (!object(choice) || !object(choice.message) || choice.message.role !== "assistant" || typeof choice.finish_reason !== "string") protocol();
-  const message = choice.message;
-  if (Object.entries(message).some(([key, data]) => !["role", "content"].includes(key) && data != null && !(key === "tool_calls" && Array.isArray(data) && data.length === 0))) protocol();
-  if (typeof message.content !== "string" && !(message.content === null && choice.finish_reason === "content_filter")) protocol();
+  const message = choice.message as Record<string, unknown>;
+  const hasToolCalls = Array.isArray(message.tool_calls);
+  if (hasToolCalls) {
+    if ((message.tool_calls as unknown[]).length === 0) protocol();
+    for (const tc of message.tool_calls as unknown[]) {
+      if (!object(tc) || typeof tc.id !== "string" || tc.type !== "function" || !object(tc.function) || typeof tc.function.name !== "string" || typeof tc.function.arguments !== "string") protocol();
+      if (tc.function.arguments !== "") {
+        try { JSON.parse(tc.function.arguments as string); } catch { protocol(); }
+      }
+    }
+  } else if (Object.entries(message).some(([key, data]) => !["role", "content"].includes(key) && data != null && !(key === "tool_calls" && Array.isArray(data) && data.length === 0))) protocol();
+  if (typeof message.content !== "string" && !(message.content === null && (choice.finish_reason === "content_filter" || hasToolCalls))) protocol();
+  // When tool_calls present, content may be empty string or null
+  if (hasToolCalls && typeof message.content === "string" && message.content !== "" && (message.content as string).length > 0) {
+    // Allow text plus tool calls - text will be preserved as text part
+  }
   if (value.id !== undefined && typeof value.id !== "string") protocol();
   if (value.model !== undefined && typeof value.model !== "string") protocol();
   const usage = normalizeUsage(value.usage);
   const finishReason = choice.finish_reason === "tool_calls" ? "tool_call"
+    : hasToolCalls ? "tool_call"
     : choice.finish_reason === "stop" || choice.finish_reason === "length" || choice.finish_reason === "content_filter"
       ? choice.finish_reason : "other";
+  const content: GenerationResponse["content"] = [];
+  if (typeof message.content === "string") {
+    if (message.content !== "" || !hasToolCalls) content.push({ type: "text", text: message.content });
+  }
+  if (hasToolCalls) {
+    for (const tc of message.tool_calls as unknown[]) {
+      const c = tc as Record<string, unknown>;
+      const fn = c.function as Record<string, unknown>;
+      let args: unknown;
+      try { args = fn.arguments === "" ? {} : JSON.parse(fn.arguments as string); } catch { protocol(); }
+      content.push({ type: "tool_call", id: c.id as string, name: fn.name as string, arguments: args as import("./types.js").JsonValue });
+    }
+  }
   return textResponse({
     ...(typeof value.id === "string" && { id: redact(value.id) }),
     ...(typeof value.model === "string" && { model: redact(value.model) }),
-    content: typeof message.content === "string" ? [{ type: "text", text: message.content }] : [],
-    finishReason,
+    content,
+    finishReason: finishReason as GenerationResponse["finishReason"],
     ...(usage !== undefined && { usage }),
-    providerMetadata: { finishReason: redact(choice.finish_reason), ...(requestId !== undefined && { requestId }) },
+    providerMetadata: { finishReason: redact(choice.finish_reason as string), ...(requestId !== undefined && { requestId }) },
   });
 }
 
