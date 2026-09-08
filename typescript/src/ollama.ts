@@ -2,7 +2,7 @@ import { ConduitError, httpFailure } from "./errors.js";
 import { object, textResponse } from "./response.js";
 import type { GenerationRequest, GenerationResponse, StreamEvent, Usage } from "./types.js";
 
-export function ollamaRequest(model: string, messages: { role: unknown; content: unknown[] }[], request: GenerationRequest, stream: boolean, wireTools?: unknown, _wireToolChoice?: unknown): string {
+export function ollamaRequest(model: string, messages: { role: unknown; content: unknown[] }[], request: GenerationRequest, stream: boolean, wireTools?: unknown, _wireToolChoice?: unknown, wireFormat?: unknown): string {
   const native = request.providerOptions ?? {};
   const rawOptions = (native as Record<string, unknown>).options;
   if ((rawOptions !== undefined && !object(rawOptions)) ||
@@ -40,6 +40,7 @@ export function ollamaRequest(model: string, messages: { role: unknown; content:
   });
   return JSON.stringify({ ...native, model, messages: wireMessages, stream,
     ...(wireTools !== undefined && { tools: wireTools }),
+    ...(wireFormat !== undefined && { format: wireFormat }),
     ...(Object.values(mapped).some(value => value !== undefined) && { options: mapped }) });
 }
 

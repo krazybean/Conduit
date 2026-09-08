@@ -44,6 +44,11 @@ export interface Message {
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
+export type ResponseFormat =
+  | { type: "text" }
+  | { type: "json" }
+  | { type: "json_schema"; schema: JsonValue };
+
 export interface GenerationRequest {
   messages: readonly Message[];
   maxOutputTokens?: number;
@@ -52,6 +57,7 @@ export interface GenerationRequest {
   stop?: readonly string[];
   tools?: readonly ToolDefinition[];
   toolChoice?: ToolChoice;
+  responseFormat?: ResponseFormat;
   providerOptions?: Record<string, JsonValue>;
   signal?: AbortSignal;
   timeout?: number;

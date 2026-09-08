@@ -7,7 +7,7 @@ import type { Client, ClientConfig, GenerationRequest, GenerationResponse, JsonV
 
 export { ConduitError } from "./errors.js";
 export type { ErrorCode, ErrorDetails } from "./errors.js";
-export type { Client, ClientConfig, ContentPart, GenerationRequest, GenerationResponse, JsonValue, ListModelsOptions, Message, Model, ModelInfo, StreamEvent, TextPart, ToolCallPart, ToolChoice, ToolDefinition, ToolResultPart, Usage } from "./types.js";
+export type { Client, ClientConfig, ContentPart, GenerationRequest, GenerationResponse, JsonValue, ListModelsOptions, Message, Model, ModelInfo, ResponseFormat, StreamEvent, TextPart, ToolCallPart, ToolChoice, ToolDefinition, ToolResultPart, Usage } from "./types.js";
 
 const ownedFields = new Set([
   "model", "messages", "stream", "stream_options", "max_tokens", "max_completion_tokens",
@@ -19,9 +19,9 @@ const protectedHeaders = new Set([
   "connection", "transfer-encoding", "upgrade", "trailer", "te", "keep-alive",
 ]);
 const requestFields = new Set([
-  "messages", "maxOutputTokens", "temperature", "topP", "stop", "tools", "toolChoice", "providerOptions", "signal", "timeout",
+  "messages", "maxOutputTokens", "temperature", "topP", "stop", "tools", "toolChoice", "responseFormat", "providerOptions", "signal", "timeout",
 ]);
-const unsupportedFields = new Set(["responseFormat", "stream", "reasoning", "vision"]);
+const unsupportedFields = new Set(["stream", "reasoning", "vision"]);
 
 function invalid(message: string): never {
   throw new ConduitError("InvalidRequestError", message);
@@ -121,6 +121,44 @@ function encodeToolChoice(choice: unknown): unknown {
   return choice;
 }
 
+function validateResponseFormat(value: unknown): void {
+  if (value === undefined) return;
+  if (!object(value)) invalid("responseFormat must be an object.");
+  if (typeof value.type !== "string") invalid("responseFormat.type must be \"text\", \"json\", or \"json_schema\".");
+  if (!["text", "json", "json_schema"].includes(value.type)) invalid("responseFormat.type must be \"text\", \"json\", or \"json_schema\".");
+  if (value.type === "text" || value.type === "json") {
+    keys(value, new Set(["type"]));
+    return;
+  }
+  // json_schema
+  keys(value, new Set(["type", "schema"]));
+  try { json(value.schema); } catch { invalid("responseFormat.schema must be JSON-compatible."); }
+}
+
+function encodeResponseFormat(value: unknown, driver: ClientConfig["driver"]): unknown {
+  if (value === undefined) return undefined;
+  const fmt = value as Record<string, unknown>;
+  if (fmt.type === "text") {
+    // Text is provider default; omit wire field to avoid unnecessary restriction.
+    // Some OpenAI endpoints accept {type:"text"} but omission is more compatible.
+    return undefined;
+  }
+  if (fmt.type === "json") {
+    return driver === "ollama" ? "json" : { type: "json_object" };
+  }
+  // json_schema
+  const schema = fmt.schema;
+  if (driver === "ollama") return schema;
+  return {
+    type: "json_schema",
+    json_schema: {
+      name: "response",
+      strict: true,
+      schema,
+    },
+  };
+}
+
 function encode(model: string, request: GenerationRequest, streaming: boolean, driver: ClientConfig["driver"]): string {
   if (!object(request)) invalid("A generation request is required.");
   if (Object.keys(request).some(key => unsupportedFields.has(key))) {
@@ -130,6 +168,7 @@ function encode(model: string, request: GenerationRequest, streaming: boolean, d
   if (!Array.isArray(request.messages) || request.messages.length === 0) invalid("messages must be a nonempty array.");
   validateTools(request.tools);
   validateToolChoice(request.toolChoice, request.tools as readonly unknown[] | undefined);
+  validateResponseFormat(request.responseFormat);
   const messages = Array.from(request.messages, message => {
     if (!object(message)) invalid("Each message must be an object.");
     keys(message, new Set(["role", "content"]));
@@ -186,7 +225,7 @@ function encode(model: string, request: GenerationRequest, streaming: boolean, d
     if (role === "tool" && hasText) invalid("Tool messages must not contain text parts; use tool_result.");
     return { role, content };
   });
-  const { maxOutputTokens, temperature, topP, stop, providerOptions, tools, toolChoice } = request;
+  const { maxOutputTokens, temperature, topP, stop, providerOptions, tools, toolChoice, responseFormat } = request;
   if (maxOutputTokens !== undefined && (!Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1)) invalid("maxOutputTokens must be a positive safe integer.");
   if (temperature !== undefined && (!Number.isFinite(temperature) || temperature < 0 || (driver === "openai-compatible" && temperature > 2))) invalid(driver === "ollama" ? "temperature must be finite and nonnegative." : "temperature must be between 0 and 2.");
   if (topP !== undefined && (!Number.isFinite(topP) || topP < 0 || topP > 1)) invalid("topP must be between 0 and 1.");
@@ -203,11 +242,12 @@ function encode(model: string, request: GenerationRequest, streaming: boolean, d
   // If tools were provided, ensure providerOptions does not also contain raw tools (already reserved), but allow passthrough of native extras
   const wireTools = encodeTools(tools as import("./types.js").ToolDefinition[] | undefined);
   const wireToolChoice = encodeToolChoice(toolChoice);
+  const wireFormat = encodeResponseFormat(responseFormat, driver);
   if (driver === "ollama") {
     if (wireToolChoice !== undefined) {
       throw new ConduitError("UnsupportedCapabilityError", "toolChoice is not supported for Ollama; omit toolChoice or use providerOptions for native fields.");
     }
-    return ollamaRequest(model, messages as { role: unknown; content: unknown[] }[], request, streaming, wireTools, undefined);
+    return ollamaRequest(model, messages as { role: unknown; content: unknown[] }[], request, streaming, wireTools, undefined, wireFormat);
   }
   // OpenAI-compatible wire: map tool messages and tool calls
   const wireMessages = messages.map(m => {
@@ -241,6 +281,7 @@ function encode(model: string, request: GenerationRequest, streaming: boolean, d
     max_tokens: maxOutputTokens, temperature, top_p: topP, stop: stop === undefined ? undefined : Array.from(stop),
     ...(wireTools !== undefined && { tools: wireTools }),
     ...(wireToolChoice !== undefined && { tool_choice: wireToolChoice }),
+    ...(wireFormat !== undefined && { response_format: wireFormat }),
   });
 }
 
