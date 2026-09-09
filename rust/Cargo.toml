@@ -7,7 +7,7 @@ description = "Conduit — lightweight AI driver for OpenAI-compatible, Ollama, 
 repository = "https://github.com/krazybean/Conduit"
 homepage = "https://github.com/krazybean/Conduit"
 readme = "README.md"
-keywords = ["ai", "llm", "openai", "ollama", "anthropic", "gemini"]
+keywords = ["ai", "llm", "ollama", "openai", "anthropic"]
 categories = ["api-bindings"]
 
 [lib]
