@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "conduit-ai"
-version = "0.1.0"
+version = "0.2.0"
 description = "Conduit — lightweight AI driver for OpenAI-compatible, Ollama, Anthropic, Gemini (Python)"
 readme = "README.md"
 requires-python = ">=3.10"

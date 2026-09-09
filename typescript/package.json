@@ -1,6 +1,6 @@
 {
   "name": "@krazybean/conduit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Conduit — lightweight AI driver for OpenAI-compatible, Ollama, Anthropic, Gemini (TypeScript)",
   "type": "module",
   "license": "MIT",
