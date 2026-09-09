@@ -387,7 +387,7 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
   } else if (driver === "gemini") {
     if (credentials) headers.set("x-goog-api-key", credentials);
   } else if (credentials) headers.set("authorization", `Bearer ${credentials}`);
-  // ponytail: known raw/URL-encoded secrets only; add encodings when a provider demonstrates them.
+  // NOTE: known raw/URL-encoded secrets only; add encodings when a provider demonstrates them.
   const redactions = [...new Set(secrets.flatMap(secret => [secret, encodeURIComponent(secret)]))].sort((a, b) => b.length - a.length);
   const redact = (text: string): string => redactions.reduce((result, secret) => result.split(secret).join("[REDACTED]"), text);
   function protocolModels(message = "Malformed or unsupported model listing response."): never {
@@ -501,7 +501,7 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
         const all: ModelInfo[] = [];
         let cursor: string | undefined;
         const seenCursors = new Set<string>();
-        // ponytail: sequential pagination, guard against non-progressing cursors; parallel fetch would violate timeout semantics.
+        // NOTE: sequential pagination, guard against non-progressing cursors; parallel fetch would violate timeout semantics.
         for (let pages = 0; pages < 100; pages++) {
           controller.signal.throwIfAborted();
           const pageUrl = cursor === undefined ? listUrl : `${listUrl}?after_id=${encodeURIComponent(cursor)}`;
@@ -546,7 +546,7 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
         const all: ModelInfo[] = [];
         let pageToken: string | undefined;
         const seenTokens = new Set<string>();
-        // ponytail: sequential pagination, guard non-progressing token; parallel would violate timeout.
+        // NOTE: sequential pagination, guard non-progressing token; parallel would violate timeout.
         for (let pages = 0; pages < 100; pages++) {
           controller.signal.throwIfAborted();
           const pageUrl = pageToken === undefined ? listUrl : `${listUrl}?pageToken=${encodeURIComponent(pageToken)}`;

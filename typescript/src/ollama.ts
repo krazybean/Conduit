@@ -137,7 +137,7 @@ export function ollamaResponse(input: unknown, requestId: string | undefined, re
 }
 
 // Native Ollama framing is NDJSON, independent of the OpenAI SSE parser.
-// ponytail: incremental line buffering; unbounded single line grows until delimiter/cancellation.
+// NOTE: incremental line buffering; unbounded single line grows until delimiter/cancellation.
 async function* records(body: ReadableStream<Uint8Array>): AsyncGenerator<unknown> {
   const reader = body.getReader();
   const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -167,7 +167,7 @@ async function* records(body: ReadableStream<Uint8Array>): AsyncGenerator<unknow
   }
 }
 
-// ponytail: Ollama streams complete tool-call objects per NDJSON line, not token-level argument fragments; each tool_call_delta represents a newly observed complete call.
+// NOTE: Ollama streams complete tool-call objects per NDJSON line, not token-level argument fragments; each tool_call_delta represents a newly observed complete call.
 export async function* ollamaStream(body: ReadableStream<Uint8Array>, requestId: string | undefined, redact: (text: string) => string): AsyncGenerator<StreamEvent> {
   let started = false;
   let model: string | undefined;

@@ -3020,7 +3020,7 @@ class Client:
                                 if _is_aborted(request.get("signal") if isinstance(request, dict) else None):
                                     raise ConduitError("CancelledError", "Request cancelled by caller.")
                                 yield chunk
-                        # ponytail: incremental SSE — first event yielded before EOF
+                        # NOTE: incremental SSE — first event yielded before EOF
                         yield from _parse_openai_stream_incremental(_byte_chunks_oa(), req_id, self._redact)
                         return
                     elif self._driver == "anthropic":
