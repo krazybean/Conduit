@@ -28,7 +28,7 @@ More: [typescript/README.md](typescript/README.md)
 ## Python
 
 ```sh
-pip install conduit-ai
+pip install conduit-llm
 ```
 
 Requires Python 3.10+. Zero runtime dependencies. Import stays `conduit`.

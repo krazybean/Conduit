@@ -1,11 +1,11 @@
-# conduit-ai
+# conduit-llm
 
 Lightweight AI driver for OpenAI-compatible, Ollama, Anthropic, and Gemini — transport and normalization only, no framework. Python import remains `conduit`.
 
 ## Install
 
 ```sh
-pip install conduit-ai
+pip install conduit-llm
 ```
 
 Requires Python 3.10+. Zero runtime dependencies (stdlib `http.client`).
