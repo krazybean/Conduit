@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "conduit"
+name = "conduit-ai"
 version = "0.1.0"
 description = "Conduit — lightweight AI driver for OpenAI-compatible, Ollama, Anthropic, Gemini (Python)"
 readme = "README.md"
@@ -19,11 +19,16 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Intended Audience :: Developers",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
 [project.urls]
 Homepage = "https://github.com/krazybean/Conduit"
 Repository = "https://github.com/krazybean/Conduit"
+Documentation = "https://github.com/krazybean/Conduit#readme"
+Issues = "https://github.com/krazybean/Conduit/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["conduit"]

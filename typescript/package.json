@@ -1,5 +1,5 @@
 {
-  "name": "conduit",
+  "name": "@krazybean/conduit",
   "version": "0.1.0",
   "description": "Conduit — lightweight AI driver for OpenAI-compatible, Ollama, Anthropic, Gemini (TypeScript)",
   "type": "module",
@@ -8,6 +8,15 @@
     "type": "git",
     "url": "https://github.com/krazybean/Conduit.git"
   },
+  "homepage": "https://github.com/krazybean/Conduit",
+  "keywords": [
+    "ai",
+    "llm",
+    "openai",
+    "ollama",
+    "anthropic",
+    "gemini"
+  ],
   "engines": {
     "node": ">=22.13.0"
   },
@@ -18,12 +27,17 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && node --test test/*.test.mjs"
+    "test": "npm run build && node --test test/*.test.mjs",
+    "prepack": "npm run build"
   },
   "devDependencies": {
     "typescript": "5.9.3"

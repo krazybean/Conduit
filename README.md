@@ -6,71 +6,65 @@ Conduit owns model transport and normalization. The application owns history, to
 
 **Product test:** can you add local or hosted AI to a new app in ~10 minutes without dragging in a framework? If yes, Conduit is working.
 
-## Quick Start
+Drivers (v0): `openai-compatible` · `ollama` (native `/api/chat`) · `anthropic` (`/v1/messages`) · `gemini` (`/v1beta/models/...:generateContent`)
 
-Ollama is the zero-ceremony local path — no endpoint or API key required. Simple string `generate("Hello")` is the 80% case; full `GenerationRequest` remains available.
+## TypeScript / JavaScript
+
+```sh
+npm install @krazybean/conduit
+```
+
+Requires Node 22.13+ ESM. Zero runtime dependencies.
+
+```ts
+import { connect } from "@krazybean/conduit";
+
+const model = connect({ driver: "ollama", model: "qwen3:8b" });
+console.log((await model.generate("Hello")).text);
+```
+
+More: [typescript/README.md](typescript/README.md)
+
+## Python
+
+```sh
+pip install conduit-ai
+```
+
+Requires Python 3.10+. Zero runtime dependencies. Import stays `conduit`.
 
 ```python
-# Python — Ollama (no endpoint)
 from conduit import connect
 
 model = connect(driver="ollama", model="qwen3:8b")
 print(model.generate("Hello").text)
-
-for event in model.stream("Hello"):
-    if event["type"] == "text_delta":
-        print(event["text"], end="")
 ```
 
-```ts
-// TypeScript — Ollama (no endpoint)
-import { connect } from "conduit";
+More: [python/README.md](python/README.md)
 
-const model = connect({ driver: "ollama", model: "qwen3:8b" });
-console.log((await model.generate("Hello")).text);
+## Rust
 
-for await (const event of model.stream("Hello")) {
-  if (event.type === "text_delta") process.stdout.write(event.text);
-}
+```sh
+cargo add conduit-ai
 ```
+
+Sync, `ureq` + `serde_json` only. Package `conduit-ai` exposes library `conduit`.
 
 ```rust
-// Rust — Ollama (no endpoint)
-use conduit::{connect, ClientConfig};
+use conduit::ollama;
 
-let model = connect(ClientConfig { driver: "ollama".into(), model: Some("qwen3:8b".into()), ..Default::default() }).unwrap();
+let model = ollama("qwen3:8b").unwrap();
 println!("{}", model.generate("Hello").unwrap().text());
-
-for event in model.stream("Hello").unwrap() {
-    println!("{:?}", event.unwrap());
-}
 ```
 
-Hosted and other drivers need an endpoint (and credentials where required):
-
-```python
-from conduit import connect
-client = connect(driver="openai-compatible", endpoint="http://localhost:1234/v1", model="my-model")
-print(client.generate("Hello").text)
-```
-
-```ts
-import { connect } from "conduit";
-const model = connect({ driver: "openai-compatible", endpoint: "http://localhost:1234/v1", model: "my-model" });
-console.log((await model.generate("Hello")).text);
-```
-
-Drivers (v0): `openai-compatible` · `ollama` (native `/api/chat`) · `anthropic` (`/v1/messages`) · `gemini` (`/v1beta/models/...:generateContent`)
-
-Languages: TypeScript/JavaScript (Node 22.13+ ESM, `fetch`), Python 3.10+ (stdlib `http.client`), Rust (sync `ureq` + `serde_json`)
+More: [rust/README.md](rust/README.md)
 
 ## Full API
 
-Explicit `messages` and options still work — use them when you need tools, history, or structured output:
+Explicit `messages` and options still work — use them when you need tools, history, or structured output. Simple `generate("Hello")` is the 80% case; full `GenerationRequest` remains available.
 
 ```ts
-// TypeScript — OpenAI-compatible
-import { connect } from "./typescript/dist/index.js";
+import { connect } from "@krazybean/conduit";
 const client = connect({ driver: "openai-compatible", endpoint: "http://localhost:1234/v1", credentials: process.env.CONDUIT_API_KEY });
 console.log(await client.listModels());
 const model = client.model("my-model");
@@ -82,11 +76,9 @@ for await (const e of model.stream({ messages: [{ role: "user", content: "Hello"
 }
 ```
 
-```py
-# Python — OpenAI-compatible
+```python
 from conduit import connect
-client = connect(driver="openai-compatible", endpoint="http://localhost:1234/v1", credentials=None)
-print(client.list_models())
+client = connect(driver="openai-compatible", endpoint="http://localhost:1234/v1")
 model = client.model("my-model")
 res = model.generate(messages=[{"role": "user", "content": "Hello"}])
 print(res.text, res.usage)
@@ -95,14 +87,11 @@ for ev in model.stream(messages=[{"role": "user", "content": "Hello"}]):
 ```
 
 ```rust
-// Rust — OpenAI-compatible (sync)
 use conduit::{connect, ClientConfig, GenerationRequest, Message, ContentPart, TextPart};
 let client = connect(ClientConfig { driver: "openai-compatible".into(), endpoint: "http://localhost:1234/v1".into(), ..Default::default() }).unwrap();
-println!("{:?}", client.list_models(None).unwrap());
 let model = client.model("my-model").unwrap();
 let res = model.generate(GenerationRequest { messages: vec![Message { role: "user".into(), content: vec![ContentPart::Text(TextPart { part_type: "text".into(), text: "Hello".into() })] }], ..Default::default() }).unwrap();
 println!("{} {:?}", res.text(), res.usage);
-for ev in model.stream(GenerationRequest { messages: vec![Message { role: "user".into(), content: vec![ContentPart::Text(TextPart { part_type: "text".into(), text: "Hello".into() })] }], ..Default::default() }).unwrap() { println!("{:?}", ev.unwrap()); }
 ```
 
 `credentials` is `Authorization: Bearer` (OpenAI/Ollama) or `x-api-key` (Anthropic) / `x-goog-api-key` (Gemini). `providerOptions` is the escape hatch for native fields; Conduit-owned fields (`model`, `messages`, `stream`, `tools`, `format`/`response_format`, etc.) are rejected even when equal. No automatic routing, retries, or tool execution — tools are transport-only (`inputSchema` → provider `parameters`/`parametersJsonSchema`, `id` preserved, never fabricated).
@@ -111,7 +100,7 @@ Structured output: `responseFormat: {type:"text"}` (omit), `{type:"json"}` (`jso
 
 Errors are normalized `ConduitError` with `name` categories: `InvalidRequestError`, `AuthenticationError`, `AuthorizationError`, `ModelNotFoundError`, `RateLimitError`, `TimeoutError`, `ConnectionError`, `ProtocolError`, `ProviderError`, `UnsupportedCapabilityError`, `CancelledError`.
 
-Timeout is one operation deadline (1..2147483647 ms), not per-chunk; pagination and streaming respect the same deadline. Cancellation via `signal`/`AbortSignal`/`AtomicBool`.
+Timeout is one operation deadline (1..2147483647 ms), not per-chunk; streaming respects the same deadline. Cancellation via `signal`/`AbortSignal`/`AtomicBool`.
 
 Spec is authoritative: [spec/README.md](spec/README.md). Conformance fixtures in [conformance/](conformance/).
 
@@ -119,9 +108,9 @@ Spec is authoritative: [spec/README.md](spec/README.md). Conformance fixtures in
 | --- | --- |
 | `spec/` | Semantics, drivers |
 | `conformance/` | Request/response/stream/error fixtures |
-| `typescript/` | `conduit` npm package, `npm run build && node --test test/*.test.mjs` |
-| `python/` | `conduit` pip package, `PYTHONPATH=python:python/tests python3 -m unittest discover -s python/tests -v` (66 tests) |
-| `rust/` | `conduit` crate, `cargo test -- --include-ignored` (59 tests) |
+| `typescript/` | `conduit` npm package |
+| `python/` | `conduit` pip package |
+| `rust/` | `conduit` crate |
 | `examples/` | Runnable TS/Python/Rust for OpenAI-compatible + Ollama |
 
-[Contributing](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) require exact lowercase `ponytail` for every task. License: MIT.
+License: MIT. See [CONTRIBUTING.md](CONTRIBUTING.md).

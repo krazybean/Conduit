@@ -1,13 +1,18 @@
 [package]
-name = "conduit"
+name = "conduit-ai"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
 description = "Conduit — lightweight AI driver for OpenAI-compatible, Ollama, Anthropic, Gemini (Rust, sync)"
 repository = "https://github.com/krazybean/Conduit"
+homepage = "https://github.com/krazybean/Conduit"
 readme = "README.md"
 keywords = ["ai", "llm", "openai", "ollama", "anthropic", "gemini"]
 categories = ["api-bindings"]
+
+[lib]
+name = "conduit"
+path = "src/lib.rs"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
