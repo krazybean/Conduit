@@ -50,8 +50,8 @@ describe("ergonomics", () => {
       req.on("data", (c) => (body += c));
       req.on("end", () => {
         captures.push(JSON.parse(body));
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ id: "id", object: "chat.completion", created: 1, model: "m", choices: [{ index: 0, message: { role: "assistant", content: "Hi" }, finish_reason: "stop" }] }));
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        res.end(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: "Hi" }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`);
       });
     });
     const { port } = s.address();

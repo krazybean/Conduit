@@ -44,9 +44,11 @@ class TestErgonomics(unittest.TestCase):
                 body = self.rfile.read(length)
                 captures.append(json.loads(body))
                 self.send_response(200)
-                self.send_header("content-type", "application/json")
+                self.send_header("content-type", "text/event-stream")
                 self.end_headers()
-                self.wfile.write(json.dumps({"id": "id", "object": "chat.completion", "created": 1, "model": "m", "choices": [{"index": 0, "message": {"role": "assistant", "content": "Hi"}, "finish_reason": "stop"}]}).encode())
+                self.wfile.write(f"data: {json.dumps({'choices': [{'index': 0, 'delta': {'content': 'Hi'}, 'finish_reason': None}]})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]})}\n\n".encode())
+                self.wfile.write(b"data: [DONE]\n\n")
             def log_message(self, *a, **k): pass
         s = HTTPServer(("127.0.0.1", 0), H)
         threading.Thread(target=s.serve_forever, daemon=True).start()
