@@ -1,14 +1,20 @@
-# Conduit — lightweight AI driver
+# Conduit
 
-Conduit is a lightweight driver/library for local and hosted model APIs — lightweight AI access without adopting an AI framework. One explicit `connect` → `model` → `generate`/`stream` per language, no framework.
+[![npm](https://img.shields.io/npm/v/@krazybean/conduit)](https://www.npmjs.com/package/@krazybean/conduit) [![PyPI](https://img.shields.io/pypi/v/conduit-llm)](https://pypi.org/project/conduit-llm/) [![crates.io](https://img.shields.io/crates/v/conduit-ai)](https://crates.io/crates/conduit-ai) [![License: MIT](https://img.shields.io/github/license/krazybean/Conduit)](https://github.com/krazybean/Conduit/blob/main/LICENSE)
 
-Conduit owns model transport and normalization. The application owns history, tool execution, retries, orchestration, etc.
+A lightweight AI driver. Infrastructure, not a framework.
 
-**Product test:** can you add local or hosted AI to a new app in ~10 minutes without dragging in a framework? If yes, Conduit is working.
+One small normalized API — `connect` → `model` → `generate` / `stream` — for local or hosted models across TypeScript, Python, and Rust. No orchestration, agents, or RAG baggage.
 
-Drivers (v0): `openai-compatible` · `ollama` (native `/api/chat`) · `anthropic` (`/v1/messages`) · `gemini` (`/v1beta/models/...:generateContent`)
+```ts
+import { connect } from "@krazybean/conduit";
+const model = connect({ driver: "ollama", model: "qwen3:8b" });
+console.log((await model.generate("Why is the sky blue?")).text);
+```
 
-## TypeScript / JavaScript
+## Install
+
+### TypeScript / JavaScript
 
 ```sh
 npm install @krazybean/conduit
@@ -16,101 +22,117 @@ npm install @krazybean/conduit
 
 Requires Node 22.13+ ESM. Zero runtime dependencies.
 
-```ts
-import { connect } from "@krazybean/conduit";
-
-const model = connect({ driver: "ollama", model: "qwen3:8b" });
-console.log((await model.generate("Hello")).text);
-```
-
-More: [typescript/README.md](typescript/README.md)
-
-## Python
+### Python
 
 ```sh
 pip install conduit-llm
 ```
 
-Requires Python 3.10+. Zero runtime dependencies. Import stays `conduit`.
+Requires Python 3.10+. Zero runtime dependencies. The distribution is `conduit-llm`; the Python package remains `conduit`.
 
 ```python
 from conduit import connect
-
-model = connect(driver="ollama", model="qwen3:8b")
-print(model.generate("Hello").text)
 ```
 
-More: [python/README.md](python/README.md)
+### Rust
 
-## Rust
+```toml
+# Cargo.toml
+[dependencies]
+conduit-ai = "0.2.0"
+```
 
 ```sh
 cargo add conduit-ai
 ```
 
-Sync, `ureq` + `serde_json` only. Package `conduit-ai` exposes library `conduit`.
+Sync, `ureq` + `serde_json` only. The crates.io package is `conduit-ai`; the Rust crate remains `conduit`.
+
+```rust
+use conduit::ollama;
+```
+
+## Quick Start
+
+Ollama is the zero-ceremony local path — no endpoint needed (defaults to `http://localhost:11434`).
+
+**TypeScript**
+
+```ts
+import { connect } from "@krazybean/conduit";
+
+const model = connect({
+  driver: "ollama",
+  model: "qwen3:8b",
+});
+
+const response = await model.generate("Why is the sky blue?");
+console.log(response.text);
+```
+
+**Python**
+
+```python
+from conduit import connect
+
+model = connect(
+    driver="ollama",
+    model="qwen3:8b",
+)
+
+response = model.generate("Why is the sky blue?")
+print(response.text)
+```
+
+**Rust**
 
 ```rust
 use conduit::ollama;
 
 let model = ollama("qwen3:8b").unwrap();
-println!("{}", model.generate("Hello").unwrap().text());
+let response = model.generate("Why is the sky blue?").unwrap();
+println!("{}", response.text());
 ```
 
-More: [rust/README.md](rust/README.md)
+## Supported Drivers
 
-## Full API
-
-Explicit `messages` and options still work — use them when you need tools, history, or structured output. Simple `generate("Hello")` is the 80% case; full `GenerationRequest` remains available.
-
-```ts
-import { connect } from "@krazybean/conduit";
-const client = connect({ driver: "openai-compatible", endpoint: "http://localhost:1234/v1", credentials: process.env.CONDUIT_API_KEY });
-console.log(await client.listModels());
-const model = client.model("my-model");
-const res = await model.generate({ messages: [{ role: "user", content: "Hello" }] });
-console.log(res.text, res.usage);
-for await (const e of model.stream({ messages: [{ role: "user", content: "Hello" }] })) {
-  if (e.type === "text_delta") process.stdout.write(e.text);
-  if (e.type === "done") console.log("\nfinish:", e.response.finishReason);
-}
-```
-
-```python
-from conduit import connect
-client = connect(driver="openai-compatible", endpoint="http://localhost:1234/v1")
-model = client.model("my-model")
-res = model.generate(messages=[{"role": "user", "content": "Hello"}])
-print(res.text, res.usage)
-for ev in model.stream(messages=[{"role": "user", "content": "Hello"}]):
-    if ev["type"] == "text_delta": print(ev["text"], end="")
-```
-
-```rust
-use conduit::{connect, ClientConfig, GenerationRequest, Message, ContentPart, TextPart};
-let client = connect(ClientConfig { driver: "openai-compatible".into(), endpoint: "http://localhost:1234/v1".into(), ..Default::default() }).unwrap();
-let model = client.model("my-model").unwrap();
-let res = model.generate(GenerationRequest { messages: vec![Message { role: "user".into(), content: vec![ContentPart::Text(TextPart { part_type: "text".into(), text: "Hello".into() })] }], ..Default::default() }).unwrap();
-println!("{} {:?}", res.text(), res.usage);
-```
-
-`credentials` is `Authorization: Bearer` (OpenAI/Ollama) or `x-api-key` (Anthropic) / `x-goog-api-key` (Gemini). `providerOptions` is the escape hatch for native fields; Conduit-owned fields (`model`, `messages`, `stream`, `tools`, `format`/`response_format`, etc.) are rejected even when equal. No automatic routing, retries, or tool execution — tools are transport-only (`inputSchema` → provider `parameters`/`parametersJsonSchema`, `id` preserved, never fabricated).
-
-Structured output: `responseFormat: {type:"text"}` (omit), `{type:"json"}` (`json`/`application/json`), `{type:"json_schema", jsonSchema}` (Ollama direct schema, Gemini `responseJsonSchema`, OpenAI `response_format`). Anthropic structured output remains `UnsupportedCapabilityError`.
-
-Errors are normalized `ConduitError` with `name` categories: `InvalidRequestError`, `AuthenticationError`, `AuthorizationError`, `ModelNotFoundError`, `RateLimitError`, `TimeoutError`, `ConnectionError`, `ProtocolError`, `ProviderError`, `UnsupportedCapabilityError`, `CancelledError`.
-
-Timeout is one operation deadline (1..2147483647 ms), not per-chunk; streaming respects the same deadline. Cancellation via `signal`/`AbortSignal`/`AtomicBool`.
-
-Spec is authoritative: [spec/README.md](spec/README.md). Conformance fixtures in [conformance/](conformance/).
-
-| Dir | Purpose |
+| Driver | Local / Hosted |
 | --- | --- |
-| `spec/` | Semantics, drivers |
-| `conformance/` | Request/response/stream/error fixtures |
-| `typescript/` | `conduit` npm package |
-| `python/` | `conduit` pip package |
-| `rust/` | `conduit` crate |
-| `examples/` | Runnable TS/Python/Rust for OpenAI-compatible + Ollama |
+| OpenAI-compatible | Both (any OpenAI-compatible base URL) |
+| Ollama | Local / remote Ollama (`/api/chat`) |
+| Anthropic | Hosted (`/v1/messages`) |
+| Gemini | Hosted (`/v1beta/models/...:generateContent`) |
+
+`openai-compatible` covers any provider exposing the OpenAI Chat Completions shape — not only OpenAI itself.
+
+## What Conduit Is / Isn't
+
+**Conduit does:**
+
+- normalized generation and streaming
+- model discovery (`listModels` / `list_models`)
+- tools and structured output transport
+- normalized errors
+- provider escape hatches (`providerOptions`)
+
+**Conduit does not:**
+
+- agents
+- orchestration
+- RAG
+- memory
+- prompt management
+- tool execution
+- model routing
+
+Conduit owns transport and normalization. Your application owns history, tool execution, retries, and orchestration.
+
+## Language-specific details
+
+- TypeScript: [typescript/README.md](typescript/README.md) — Node ESM, `fetch`, types, streaming details
+- Python: [python/README.md](python/README.md) — stdlib `http.client`, mapping helpers
+- Rust: [rust/README.md](rust/README.md) — sync `ureq`, `serde`, `ollama()` helper
+
+Spec is authoritative: [spec/README.md](spec/README.md). Conformance fixtures: [conformance/](conformance/). Examples: [examples/](examples/).
 
 License: MIT. See [CONTRIBUTING.md](CONTRIBUTING.md).
