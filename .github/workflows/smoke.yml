@@ -1,0 +1,45 @@
+name: Smoke (published packages)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  npm-smoke:
+    name: npm smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: |
+          mkdir /tmp/smoke-npm
+          cd /tmp/smoke-npm
+          npm init -y
+          npm install @krazybean/conduit
+          node --input-type=module -e "import {connect} from '@krazybean/conduit'; const m = connect({driver:'ollama', model:'qwen3:8b'}); console.log(typeof m.generate);"
+  pypi-smoke:
+    name: PyPI smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          python -m venv /tmp/smoke-py
+          /tmp/smoke-py/bin/pip install conduit-llm
+          /tmp/smoke-py/bin/python -c "from conduit import connect; m = connect(driver='ollama', model='qwen3:8b'); print(type(m).__name__)"
+  cargo-smoke:
+    name: crates.io smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+      - run: |
+          cargo new /tmp/smoke-rs --bin
+          cd /tmp/smoke-rs
+          cargo add conduit-ai
+          printf 'use conduit::ollama;\nfn main(){ let m = ollama("qwen3:8b").unwrap(); println!("{}", m.generate("Hello").is_err()); }\n' > src/main.rs
+          cargo check
