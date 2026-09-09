@@ -29,6 +29,10 @@ updates:
         patterns:
           - "*"
     open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: "ureq"
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: github-actions
     directory: /
