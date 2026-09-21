@@ -6,6 +6,8 @@
 
 Conduit provides one small explicit interface for local and hosted model APIs across TypeScript, Python, and Rust — without bringing in agents, orchestration, RAG, memory, or framework machinery.
 
+![Conduit streaming with a local Ollama model](docs/assets/conduit-demo.gif)
+
 ```
 Your application
       │
@@ -132,7 +134,7 @@ Provide tool schemas, receive normalized tool calls. Conduit never executes tool
 ```ts
 await model.generate({
   messages: [{ role: "user", content: "What's the weather in Paris?" }],
-  tools: [{ name: "weather", description: "Get weather", inputSchema: { type: "object", properties: { location: { type: "string" } } } }],
+  tools: [{ name: "weather", description: "Get weather", inputSchema: { type: "object", properties: { location: { type: "string" } } }],
 });
 ```
 
