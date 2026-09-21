@@ -1,8 +1,12 @@
 # Conduit specification — draft v0
 
 This language-neutral contract is authoritative; implementations must have
-equivalent observable behavior, not identical syntax. The TypeScript OpenAI-compatible text generation, streaming, and model-listing slices are implemented;
-other operations and languages remain planned. MUST/MUST NOT state requirements; proposals explicitly marked
+equivalent observable behavior, not identical syntax. TypeScript, Python, and
+Rust implementations are published and cover the current Conduit surface across
+OpenAI-compatible, Ollama, Anthropic, and Gemini drivers: model discovery,
+generation, streaming, tools, structured-output handling where the provider
+supports it, normalized usage/errors, timeouts, cancellation, and provider
+escape hatches. MUST/MUST NOT state requirements; proposals explicitly marked
 provisional can be refined with concrete wire fixtures before implementation.
 Snake-case field names describe semantics, not mandatory language spellings.
 `?` means optional; omission means absent, not null or a fabricated default.
@@ -34,15 +38,19 @@ hierarchy is needed. Internal HTTP reuse is allowed, application state is not.
 Conduit owns transport and normalization, never application decisions. The full
 exclusion list and scope test live in [CONTRIBUTING](../CONTRIBUTING.md).
 One package per language, no provider SDKs, schema ecosystem, IDL, or codegen.
-TypeScript should use native fetch, Python initially stdlib HTTP/JSON, Rust only
-justified HTTP/TLS and serialization dependencies when implemented.
+TypeScript uses native `fetch`, Python uses stdlib HTTP/JSON, and Rust uses only
+justified HTTP/TLS and serialization dependencies.
 
 ## Decisions still provisional
 
-TypeScript now uses camelCase names, two connect overloads, Node 22.13+ ESM,
-opt-in timeouts, and max_tokens mapping. These decisions are documented in the
-client and driver specs and tested with shared fixtures. Other language API
-spellings, packaging, and transport cleanup syntax remain implementation choices.
-Multimodal wire mapping, tool argument delta details, and discovery pagination
-need fixtures before their respective slices. No known human decision blocks
-the first non-streaming TypeScript slice. Release names are a later decision.
+Public language APIs are intentionally idiomatic rather than syntax-identical,
+while observable behavior remains aligned through the shared specification and
+conformance fixtures. TypeScript uses camelCase names, two connect overloads,
+Node 22.13+ ESM, opt-in timeouts, and max_tokens mapping. Python requires 3.10+
+and uses stdlib `http.client` without runtime dependencies. Rust exposes the
+`conduit` library from the `conduit-ai` package and uses a synchronous transport.
+
+Multimodal wire mapping, finer-grained tool argument delta behavior, discovery
+pagination, and other future slices still require concrete fixtures before their
+contracts are promoted from provisional. New behavior should update this spec
+and shared conformance cases before or with implementation.
