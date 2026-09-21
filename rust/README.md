@@ -12,7 +12,7 @@ Or in `Cargo.toml`:
 
 ```toml
 [dependencies]
-conduit-ai = "0.2.0"
+conduit-ai = "0.2.1"
 ```
 
 ## Ollama Quick Start
