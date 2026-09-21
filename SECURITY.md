@@ -2,20 +2,23 @@
 
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+Conduit is currently in the `0.x` release series. Security fixes are applied to the latest published release on the `main` line; older `0.x` releases should be considered unsupported unless a release note explicitly says otherwise.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+Current package versions are kept aligned across npm (`@krazybean/conduit`), PyPI (`conduit-llm`), and crates.io (`conduit-ai`).
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
+Please do not open a public issue for a suspected vulnerability that could expose credentials, user data, or provider access.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+Report security issues privately through GitHub's security reporting features for this repository when available. Include enough information to reproduce and assess the issue, such as:
+
+- affected Conduit package and version
+- driver/provider involved
+- minimal reproduction steps
+- expected and observed behavior
+- security impact
+- whether credentials, authorization headers, URLs, diagnostics, or model content are involved
+
+Do not include real API keys, tokens, or other secrets in the report. Use obviously fake credentials in reproductions.
+
+Conduit treats credential handling and diagnostic redaction as security boundaries: known credentials and sensitive header values must not leak through diagnostics, while semantic model content must not be silently altered or redacted.
