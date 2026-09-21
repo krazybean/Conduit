@@ -6,7 +6,13 @@
 
 Conduit provides one small explicit interface for local and hosted model APIs across TypeScript, Python, and Rust — without bringing in agents, orchestration, RAG, memory, or framework machinery.
 
+### Local — Ollama
+
 ![Conduit streaming with a local Ollama model](docs/assets/conduit-demo.gif)
+
+### Hosted — Groq through the OpenAI-compatible driver
+
+![Conduit streaming with a hosted Groq model](docs/assets/conduit-remote-demo.gif)
 
 ```
 Your application
