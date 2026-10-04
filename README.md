@@ -140,7 +140,7 @@ Provide tool schemas, receive normalized tool calls. Conduit never executes tool
 ```ts
 await model.generate({
   messages: [{ role: "user", content: "What's the weather in Paris?" }],
-  tools: [{ name: "weather", description: "Get weather", inputSchema: { type: "object", properties: { location: { type: "string" } } }],
+  tools: [{ name: "weather", description: "Get weather", inputSchema: { type: "object", properties: { location: { type: "string" } } } }],
 });
 ```
 
@@ -196,6 +196,7 @@ Can a developer add local or hosted AI access to a new application in roughly te
 
 ## Deeper documentation
 
+- Roadmap: [ROADMAP.md](ROADMAP.md)
 - TypeScript: [typescript/README.md](typescript/README.md)
 - Python: [python/README.md](python/README.md)
 - Rust: [rust/README.md](rust/README.md)
