@@ -9,6 +9,14 @@ JSON data. Do not fabricate IDs. Malformed complete JSON arguments from a provid
 are `ProtocolError`; incomplete streaming fragments are not parsed prematurely.
 Schema validation of arguments belongs to the caller.
 
+For the OpenAI-compatible driver, the canonical wire form is a JSON string in
+`function.arguments`. A complete non-streaming response may also provide a JSON
+object directly; the driver normalizes that object to the same decoded
+`ToolCall.arguments` value. Other argument types remain `ProtocolError`.
+Streaming tool-call deltas remain string fragments and do not accept object-valued
+arguments, because an object cannot be concatenated incrementally without a
+provider-defined representation.
+
 `ToolResult`: optional `call_id`, optional `name`, and `content` consisting of text
 or image parts (string shorthand allowed). No recursive tool calls/results inside
 a result. Return results through tool-role messages. Preserve correlation IDs;

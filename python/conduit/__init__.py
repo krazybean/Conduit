@@ -677,13 +677,17 @@ def _decode_openai(value: Any, request_id: Optional[str], redact) -> GenerationR
         if len(message["tool_calls"]) == 0:
             protocol()
         for tc in message["tool_calls"]:
-            if not isinstance(tc, dict) or not isinstance(tc.get("id"), str) or tc.get("type") != "function" or not isinstance(tc.get("function"), dict) or not isinstance(tc["function"].get("name"), str) or not isinstance(tc["function"].get("arguments"), str):
+            if not isinstance(tc, dict) or not isinstance(tc.get("id"), str) or tc.get("type") != "function" or not isinstance(tc.get("function"), dict) or not isinstance(tc["function"].get("name"), str):
                 protocol()
-            if tc["function"]["arguments"] != "":
-                try:
-                    json.loads(tc["function"]["arguments"])
-                except Exception:
-                    protocol()
+            args = tc["function"].get("arguments")
+            if isinstance(args, str):
+                if args:
+                    try:
+                        json.loads(args)
+                    except Exception:
+                        protocol()
+            elif not isinstance(args, dict):
+                protocol()
     else:
         for k, d in message.items():
             if k not in ("role", "content") and d is not None and not (k == "tool_calls" and isinstance(d, list) and len(d) == 0):
@@ -714,10 +718,13 @@ def _decode_openai(value: Any, request_id: Optional[str], redact) -> GenerationR
         for tc in message["tool_calls"]:
             fn = tc["function"]
             args_s = fn["arguments"]
-            try:
-                args = json.loads(args_s) if args_s != "" else {}
-            except Exception:
-                protocol()
+            if isinstance(args_s, str):
+                try:
+                    args = json.loads(args_s) if args_s else {}
+                except Exception:
+                    protocol()
+            else:
+                args = args_s
             content.append({"type": "tool_call", "id": tc["id"], "name": fn["name"], "arguments": args})
     return _text_response({
         **({"id": redact(value["id"])} if isinstance(value.get("id"), str) else {}),
@@ -1631,6 +1638,8 @@ def _parse_openai_stream_bytes(all_bytes: bytes, request_id: Optional[str], reda
                             cur = tool_accum.get(idx, {"arguments": ""})
                             if isinstance(tc.get("id"), str):
                                 cur["id"] = tc["id"]
+                            if isinstance(fn, dict) and "arguments" in fn and not isinstance(fn["arguments"], str):
+                                protocol()
                             if isinstance(fn.get("name"), str):
                                 cur["name"] = fn["name"]
                             if isinstance(fn.get("arguments"), str):
@@ -1775,6 +1784,8 @@ def _parse_openai_stream_incremental(chunks: Iterator[bytes], request_id: Option
                     cur = tool_accum.get(idx, {"arguments": ""})
                     if isinstance(tc.get("id"), str):
                         cur["id"] = tc["id"]
+                    if isinstance(fn, dict) and "arguments" in fn and not isinstance(fn["arguments"], str):
+                        protocol()
                     if isinstance(fn.get("name"), str):
                         cur["name"] = fn["name"]
                     if isinstance(fn.get("arguments"), str):

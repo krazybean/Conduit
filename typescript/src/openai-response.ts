@@ -28,9 +28,14 @@ export function decode(value: unknown, requestId: string | undefined, redact: (t
   if (hasToolCalls) {
     if ((message.tool_calls as unknown[]).length === 0) protocol();
     for (const tc of message.tool_calls as unknown[]) {
-      if (!object(tc) || typeof tc.id !== "string" || tc.type !== "function" || !object(tc.function) || typeof tc.function.name !== "string" || typeof tc.function.arguments !== "string") protocol();
-      if (tc.function.arguments !== "") {
-        try { JSON.parse(tc.function.arguments as string); } catch { protocol(); }
+      if (!object(tc) || typeof tc.id !== "string" || tc.type !== "function" || !object(tc.function) || typeof tc.function.name !== "string") protocol();
+      const args = tc.function.arguments;
+      if (typeof args === "string") {
+        if (args !== "") {
+          try { JSON.parse(args); } catch { protocol(); }
+        }
+      } else if (!object(args)) {
+        protocol();
       }
     }
   } else if (Object.entries(message).some(([key, data]) => !["role", "content"].includes(key) && data != null && !(key === "tool_calls" && Array.isArray(data) && data.length === 0))) protocol();
@@ -55,7 +60,11 @@ export function decode(value: unknown, requestId: string | undefined, redact: (t
       const c = tc as Record<string, unknown>;
       const fn = c.function as Record<string, unknown>;
       let args: unknown;
-      try { args = fn.arguments === "" ? {} : JSON.parse(fn.arguments as string); } catch { protocol(); }
+      if (typeof fn.arguments === "string") {
+        try { args = fn.arguments === "" ? {} : JSON.parse(fn.arguments); } catch { protocol(); }
+      } else {
+        args = fn.arguments;
+      }
       content.push({ type: "tool_call", id: c.id as string, name: fn.name as string, arguments: args as import("./types.js").JsonValue });
     }
   }

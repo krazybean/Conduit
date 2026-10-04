@@ -76,6 +76,10 @@ test("API base paths and trailing slashes are preserved predictably; credentials
 for (const f of responseFixtures) test(`shared response: ${f.id}`, async t => {
   const wire = f.input.wire;
   const { endpoint } = await server(t, (_request, response) => { response.writeHead(wire.status, wire.headers); response.end(JSON.stringify(wire.body)); });
+  if (f.expected.error) {
+    await assert.rejects(model(endpoint).generate(input), isError(f.expected.error.category));
+    return;
+  }
   const result = await model(endpoint).generate(input);
   const expected = f.expected.response;
   assert.deepEqual(result.content, expected.content);

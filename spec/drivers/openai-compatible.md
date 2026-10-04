@@ -26,7 +26,7 @@ Do not silently try another field, model, endpoint, or API.
 
 Model listing uses `GET /models` relative to the API base (e.g. `http://localhost:1234/v1/models`), preserving base path like chat completions. No body; reuse the same Authorization and custom-header handling, redirect rejection, and endpoint validation. Normalize `data[]` entries: `id` → `ModelInfo.id`; remaining fields (`object`, `created`, `owned_by`) stay in `providerMetadata`. Require `data` array and string `id`; missing/invalid is `ProtocolError`; empty array is valid `[]`. Be defensive: tolerate sparse compatible objects, do not require `object`/`created`/`owned_by`. HTTP categories are the same as generation (`401`→`AuthenticationError`, `403`→`AuthorizationError`, `429`→`RateLimitError`, `5xx`→`ProviderError`, `404` with `model_not_found`→`ModelNotFoundError` else `ProviderError`). No pagination, no provider-specific branches.
 
-Tools remain future. Text streaming is specified below.
+Tool calls follow the common [tools](../tools.md) contract. Text streaming is specified below.
 Native finish reasons remain diagnostic metadata.
 
 ## Implemented first slice
@@ -49,8 +49,9 @@ compatibility fallback. Redirects are rejected instead of forwarding credentials
 
 Successful responses require exactly one assistant message with string content
 and a string finish reason. Null content is allowed for a `content_filter` finish
-and yields no text parts. Unhandled non-text message content, including tool
-calls, is a protocol error; do not silently lose content. A `tool_calls` finish
+and yields no text parts. Unhandled non-text message content is a protocol error;
+do not silently lose content. Tool calls are normalized according to the common
+tools contract. A `tool_calls` finish
 reason alone still maps to `tool_call`; unfamiliar finish reasons map to `other`.
 Optional IDs/model names must be strings. Usage counts must be nonnegative safe
 integers when reported; no missing counts are synthesized.

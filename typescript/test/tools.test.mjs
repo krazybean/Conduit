@@ -74,6 +74,30 @@ test("openai-compatible: non-streaming tool calls", async () => {
   assert.deepEqual(r.toolCalls[0].arguments, { city: "Tokyo" });
   assert.equal(r.toolCalls[0].id, "call_1");
   assert.equal(r.text, "");
+  globalThis.fetch = async () => jsonResponse(200, {
+    id: "chat-object",
+    model: "test",
+    choices: [{
+      message: { role: "assistant", content: null, tool_calls: [{ id: "call-object", type: "function", function: { name: "get_weather", arguments: { city: "Paris" } } }] },
+      finish_reason: "tool_calls",
+    }],
+  });
+  const objectArgs = await m.generate({ messages: [{ role: "user", content: "hi" }], tools: [tool] });
+  assert.deepEqual(objectArgs.toolCalls[0].arguments, { city: "Paris" });
+  for (const argumentsValue of [[], 1, true, null]) {
+    globalThis.fetch = async () => jsonResponse(200, {
+      id: "chat-invalid-arguments",
+      model: "test",
+      choices: [{
+        message: { role: "assistant", content: null, tool_calls: [{ id: "call-invalid", type: "function", function: { name: "get_weather", arguments: argumentsValue } }] },
+        finish_reason: "tool_calls",
+      }],
+    });
+    await assert.rejects(
+      m.generate({ messages: [{ role: "user", content: "hi" }], tools: [tool] }),
+      error => error instanceof ConduitError && error.name === "ProtocolError",
+    );
+  }
   // content with text + tool call
   globalThis.fetch = async () => jsonResponse(200, {
     id: "chat-2",

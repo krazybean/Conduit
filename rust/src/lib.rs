@@ -1029,16 +1029,24 @@ fn decode_openai(
                     )
                 })?
                 .to_string();
-            let args_s = f.get("arguments").and_then(|v| v.as_str()).unwrap_or("");
-            let args: Value = if args_s.is_empty() {
-                Value::Object(Default::default())
-            } else {
-                serde_json::from_str(args_s).map_err(|_| {
+            let args = match f.get("arguments") {
+                None => Value::Object(Default::default()),
+                Some(Value::String(args_s)) if args_s.is_empty() => {
+                    Value::Object(Default::default())
+                }
+                Some(Value::String(args_s)) => serde_json::from_str(args_s).map_err(|_| {
                     ConduitError::new(
                         "ProtocolError",
                         "Malformed or unsupported Chat Completions response.",
                     )
-                })?
+                })?,
+                Some(Value::Object(args)) => Value::Object(args.clone()),
+                Some(_) => {
+                    return Err(ConduitError::new(
+                        "ProtocolError",
+                        "Malformed or unsupported Chat Completions response.",
+                    ))
+                }
             };
             content.push(ContentPart::ToolCall(ToolCallPart {
                 part_type: "tool_call".to_string(),
@@ -5158,6 +5166,14 @@ fn openai_sse_stream<R: BufRead + Send + 'static>(
                                     if let Some(n) = f.get("name").and_then(|v| v.as_str()) {
                                         entry.insert("name".to_string(), n.to_string());
                                     }
+                                    if let Some(a) = f.get("arguments") {
+                                        if !a.is_string() {
+                                            return Some(Err(ConduitError::new(
+                                                "ProtocolError",
+                                                "Malformed or incomplete Chat Completions stream.",
+                                            )));
+                                        }
+                                    }
                                     if let Some(a) = f.get("arguments").and_then(|v| v.as_str()) {
                                         let cur =
                                             entry.get("arguments").cloned().unwrap_or_default();
@@ -6481,6 +6497,73 @@ mod tests {
         // Our decode should keep id as None when missing, not fabricate
         assert_eq!(tc2[0].id, None);
         handle2.join().unwrap();
+    }
+
+    #[test]
+    fn openai_object_tool_arguments_are_normalized_and_streaming_stays_strict() {
+        let body = serde_json::json!({
+            "id": "id",
+            "model": "m",
+            "choices": [{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call","type":"function","function":{"name":"fn","arguments":{"city":"Paris"}}}]},"finish_reason":"tool_calls"}]
+        });
+        let response = decode_openai(body.clone(), None, &|value| value.to_string()).unwrap();
+        assert_eq!(
+            response.tool_calls()[0].arguments,
+            serde_json::json!({"city":"Paris"})
+        );
+
+        for arguments in [
+            serde_json::json!([]),
+            serde_json::json!(1),
+            serde_json::json!(true),
+            serde_json::Value::Null,
+        ] {
+            let mut invalid = body.clone();
+            invalid["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"] = arguments;
+            assert_eq!(
+                decode_openai(invalid, None, &|value| value.to_string())
+                    .unwrap_err()
+                    .name,
+                "ProtocolError"
+            );
+        }
+
+        let fixtures: serde_json::Value =
+            serde_json::from_str(include_str!("../../conformance/responses/openai-text.json"))
+                .unwrap();
+        for id in [
+            "tool-call-string-arguments",
+            "tool-call-object-arguments",
+            "tool-call-unsupported-arguments",
+        ] {
+            let case = fixtures
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|case| case["id"] == id)
+                .unwrap();
+            let result = decode_openai(case["input"]["wire"]["body"].clone(), None, &|value| {
+                value.to_string()
+            });
+            if case["expected"].get("error").is_some() {
+                assert_eq!(result.unwrap_err().name, "ProtocolError");
+            } else {
+                assert_eq!(
+                    result.unwrap().tool_calls()[0].arguments,
+                    serde_json::json!({"city":"Paris"})
+                );
+            }
+        }
+
+        let stream = b"data: {\"id\":\"id\",\"model\":\"m\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"name\":\"fn\",\"arguments\":{\"city\":\"Paris\"}}}]},\"finish_reason\":null}]}\n\ndata: [DONE]\n\n";
+        let mut events = openai_sse_stream(
+            std::io::Cursor::new(stream),
+            None,
+            Arc::new(|value| value.to_string()),
+            None,
+            None,
+        );
+        assert_eq!(events.next().unwrap().unwrap_err().name, "ProtocolError");
     }
 
     #[test]

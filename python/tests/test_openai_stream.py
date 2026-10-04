@@ -6,10 +6,12 @@ from helpers import local_server
 
 try:
     import conduit
+    from conduit import ConduitError
     HAS = hasattr(conduit, "connect")
 except Exception:
     HAS = False
     conduit = None
+    class ConduitError(Exception): pass
 
 
 class SSEFragmentationContract(unittest.TestCase):
@@ -65,6 +67,14 @@ class SSEFragmentationContract(unittest.TestCase):
     def test_usage_accumulation_and_empty_text_delta_suppressed(self):
         # Mirrors spec: usage snapshots cumulative, empty content deltas not emitted as text_delta
         self.assertEqual(json.loads(sse_data({"choices":[{"index":0,"delta":{"content":""}}]}).strip()[5:])["choices"][0]["delta"]["content"], "")
+
+    def test_object_tool_arguments_are_rejected_in_streaming(self):
+        if not HAS or not hasattr(conduit, "_parse_openai_stream_incremental"):
+            self.skipTest("no exposed incremental parser")
+        payload = sse_data({"choices": [{"index": 0, "delta": {"tool_calls": [{"index": 0, "function": {"name": "lookup", "arguments": {"city": "Paris"}}}]}, "finish_reason": None}]})
+        with self.assertRaises(ConduitError) as cm:
+            list(conduit._parse_openai_stream_incremental(iter([payload.encode()]), None, lambda value: value))
+        self.assertEqual(cm.exception.name, "ProtocolError")
 
     def test_live_stream_with_exact_fragment_boundaries(self):
         import base64, time

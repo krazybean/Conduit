@@ -90,6 +90,16 @@ test("every byte split reconstructs SSE, JSON, CRLF, UTF-8, and DONE", async () 
   await verify(openaiStream(body, "stream-request", text => text), fixtures[0].expected);
 });
 
+test("openai streaming rejects object-valued tool arguments", async () => {
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(sse({ choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { name: "lookup", arguments: { city: "Paris" } } }] }, finish_reason: null }] })));
+      controller.close();
+    },
+  });
+  await assert.rejects(collect(openaiStream(body, "stream-request", text => text)), category("ProtocolError"));
+});
+
 test("stream is lazy, uses the shared request, and yields before the provider finishes", async t => {
   let finish;
   const gate = new Promise(resolve => { finish = resolve; });
