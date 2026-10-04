@@ -160,7 +160,7 @@ test("malformed successful payloads and unhandled content fail explicitly", asyn
   let body;
   const { endpoint } = await server(t, (_request, response) => response.end(body));
   const malformed = [null, {}, { choices: [] }, { ...good, choices: [...good.choices, ...good.choices] }, { ...good, id: 42 }, { ...good, usage: null }, { ...good, usage: { prompt_tokens: -1 } }, { ...good, usage: { total_tokens: "6" } }];
-  for (const message of [{ role: "assistant", content: null }, { role: "user", content: "Hi" }, { role: "assistant", content: [] }, { role: "assistant", content: "Hi", tool_calls: [{ id: "call" }] }, { role: "assistant", content: "Hi", reasoning_content: "hidden" }]) malformed.push({ ...good, choices: [{ message, finish_reason: "stop" }] });
+  for (const message of [{ role: "assistant", content: null }, { role: "user", content: "Hi" }, { role: "assistant", content: [] }, { role: "assistant", content: "Hi", tool_calls: [{ id: "call" }] }, { role: "assistant", content: "Hi", reasoning_content: 1 }]) malformed.push({ ...good, choices: [{ message, finish_reason: "stop" }] });
   malformed.push({ ...good, choices: [{ message: good.choices[0].message, finish_reason: null }] });
   for (const value of malformed) {
     body = JSON.stringify(value);

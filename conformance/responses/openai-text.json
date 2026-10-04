@@ -343,5 +343,37 @@
       }
     },
     "expected": {"error": {"category": "ProtocolError"}}
+  },
+  {
+    "id": "provider-reasoning-and-empty-tools",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {"x-request-id": "request-reasoning"},
+        "body": {
+          "id": "completion-reasoning",
+          "model": "test-model",
+          "choices": [{
+            "message": {"role": "assistant", "content": "OK", "reasoning_content": "hidden", "tool_calls": []},
+            "logprobs": null,
+            "finish_reason": "stop"
+          }],
+          "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+          "system_fingerprint": "synthetic"
+        }
+      }
+    },
+    "expected": {
+      "response": {
+        "id": "completion-reasoning",
+        "model": "test-model",
+        "content": [{"type": "text", "text": "OK"}],
+        "finish_reason": "stop",
+        "provider_metadata": {"finish_reason": "stop", "request_id": "request-reasoning"},
+        "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}
+      }
+    }
   }
 ]

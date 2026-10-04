@@ -50,8 +50,10 @@ compatibility fallback. Redirects are rejected instead of forwarding credentials
 Successful responses require exactly one assistant message with string content
 and a string finish reason. Null content is allowed for a `content_filter` finish
 and yields no text parts. Unhandled non-text message content is a protocol error;
-do not silently lose content. Tool calls are normalized according to the common
-tools contract. A `tool_calls` finish
+do not silently lose content. The optional provider extension `reasoning_content`
+is ignored, and an empty `tool_calls` array is equivalent to omitting
+`tool_calls`; non-empty tool calls are normalized according to the common tools
+contract. A `tool_calls` finish
 reason alone still maps to `tool_call`; unfamiliar finish reasons map to `other`.
 Optional IDs/model names must be strings. Usage counts must be nonnegative safe
 integers when reported; no missing counts are synthesized.
@@ -92,8 +94,9 @@ blank-line-terminated `[DONE]` data event. EOF alone, a finish reason without
 protocol; cancel remaining body reads rather than waiting for socket closure.
 No events after that marker are processed. Meaningful text after a finish reason,
 changing response IDs/models, nonzero/multiple choices, or meaningful non-text
-content (including tool calls) are ProtocolError. Null/empty content deltas and
-assistant-role-only deltas are valid; empty text deltas are not emitted.
+content (including tool calls) are ProtocolError. Null/empty content deltas,
+`reasoning_content` deltas, and assistant-role-only deltas are valid; empty text
+deltas are not emitted. `reasoning_content` is not exposed as normalized content.
 
 A choices-empty chunk is accepted only for reported usage after the stream has
 started. Usage may arrive with a choice or before [DONE]; null/omitted usage means

@@ -958,7 +958,8 @@ fn decode_openai(
     let has_tool_calls = message
         .get("tool_calls")
         .and_then(|v| v.as_array())
-        .is_some();
+        .map(|calls| !calls.is_empty())
+        .unwrap_or(false);
     // content may be string, null, or missing
     let content_val = message.get("content");
     match content_val {
@@ -6535,6 +6536,7 @@ mod tests {
             "tool-call-string-arguments",
             "tool-call-object-arguments",
             "tool-call-unsupported-arguments",
+            "provider-reasoning-and-empty-tools",
         ] {
             let case = fixtures
                 .as_array()
@@ -6547,6 +6549,10 @@ mod tests {
             });
             if case["expected"].get("error").is_some() {
                 assert_eq!(result.unwrap_err().name, "ProtocolError");
+            } else if id == "provider-reasoning-and-empty-tools" {
+                let response = result.unwrap();
+                assert_eq!(response.text(), "OK");
+                assert_eq!(response.finish_reason, "stop");
             } else {
                 assert_eq!(
                     result.unwrap().tool_calls()[0].arguments,

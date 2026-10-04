@@ -100,6 +100,19 @@ test("openai streaming rejects object-valued tool arguments", async () => {
   await assert.rejects(collect(openaiStream(body, "stream-request", text => text)), category("ProtocolError"));
 });
 
+test("openai streaming ignores reasoning deltas", async () => {
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(sse({ id: "reasoning", model: "test-model", choices: [{ index: 0, delta: { role: "assistant", reasoning_content: "hidden" }, finish_reason: null }] })));
+      controller.enqueue(new TextEncoder().encode(sse({ choices: [{ index: 0, delta: { content: "OK" }, finish_reason: null }] })));
+      controller.enqueue(new TextEncoder().encode(sse({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }] }) + "data: [DONE]\n\n"));
+      controller.close();
+    },
+  });
+  const events = await collect(openaiStream(body, "stream-request", text => text));
+  assert.equal(events.find(event => event.type === "done").response.text, "OK");
+});
+
 test("stream is lazy, uses the shared request, and yields before the provider finishes", async t => {
   let finish;
   const gate = new Promise(resolve => { finish = resolve; });
@@ -184,7 +197,7 @@ test("invalid content, identity, usage, completion, and media types fail without
     sse(chunk("first", null, { id: "one" })) + sse(chunk("second", "stop", { id: "two" })),
     sse(chunk("first", null, { model: "one" })) + sse(chunk("second", "stop", { model: "two" })),
     sse(chunk("done", "stop")) + sse(chunk("too late")),
-    sse({ choices: [{ index: 0, delta: { reasoning_content: "hidden" } }] }),
+    sse({ choices: [{ index: 0, delta: { reasoning_content: 1 } }] }),
     sse({ choices: [{ index: 0, delta: { role: "user" } }] }),
     sse({ choices: [{ index: 0, delta: { content: [] } }] }),
     "data: {bad\n\n", "data: \n\n", "", ": heartbeat\n\n", "{\"choices\": []}\n\n",

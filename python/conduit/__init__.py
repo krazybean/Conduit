@@ -672,10 +672,8 @@ def _decode_openai(value: Any, request_id: Optional[str], redact) -> GenerationR
     if not isinstance(choice, dict) or not isinstance(choice.get("message"), dict) or choice["message"].get("role") != "assistant" or not isinstance(choice.get("finish_reason"), str):
         protocol()
     message = choice["message"]
-    has_tool_calls = isinstance(message.get("tool_calls"), list)
-    if has_tool_calls:
-        if len(message["tool_calls"]) == 0:
-            protocol()
+    has_tool_calls = isinstance(message.get("tool_calls"), list) and len(message["tool_calls"]) > 0
+    if isinstance(message.get("tool_calls"), list):
         for tc in message["tool_calls"]:
             if not isinstance(tc, dict) or not isinstance(tc.get("id"), str) or tc.get("type") != "function" or not isinstance(tc.get("function"), dict) or not isinstance(tc["function"].get("name"), str):
                 protocol()
@@ -690,8 +688,10 @@ def _decode_openai(value: Any, request_id: Optional[str], redact) -> GenerationR
                 protocol()
     else:
         for k, d in message.items():
-            if k not in ("role", "content") and d is not None and not (k == "tool_calls" and isinstance(d, list) and len(d) == 0):
+            if k not in ("role", "content", "reasoning_content") and d is not None and not (k == "tool_calls" and isinstance(d, list) and len(d) == 0):
                 protocol()
+    if message.get("reasoning_content") is not None and not isinstance(message.get("reasoning_content"), str):
+        protocol()
     content_val = message.get("content")
     if not (isinstance(content_val, str) or (content_val is None and (choice["finish_reason"] == "content_filter" or has_tool_calls))):
         protocol()
@@ -1618,8 +1618,10 @@ def _parse_openai_stream_bytes(all_bytes: bytes, request_id: Optional[str], reda
                     if delta.get("tool_calls") is not None:
                         if not isinstance(delta["tool_calls"], list):
                             protocol()
+                    if delta.get("reasoning_content") is not None and not isinstance(delta.get("reasoning_content"), str):
+                        protocol()
                     for k, d in delta.items():
-                        if k not in ("role", "content", "tool_calls") and d is not None:
+                        if k not in ("role", "content", "reasoning_content", "tool_calls") and d is not None:
                             protocol()
                     has_tc = isinstance(delta.get("tool_calls"), list) and len(delta["tool_calls"]) > 0
                     if finish is not None and (delta.get("content") or has_tc or choice.get("finish_reason") is not None):
@@ -1764,8 +1766,10 @@ def _parse_openai_stream_incremental(chunks: Iterator[bytes], request_id: Option
             if delta.get("tool_calls") is not None:
                 if not isinstance(delta["tool_calls"], list):
                     protocol()
+            if delta.get("reasoning_content") is not None and not isinstance(delta.get("reasoning_content"), str):
+                protocol()
             for k, d in delta.items():
-                if k not in ("role", "content", "tool_calls") and d is not None:
+                if k not in ("role", "content", "reasoning_content", "tool_calls") and d is not None:
                     protocol()
             has_tc = isinstance(delta.get("tool_calls"), list) and len(delta["tool_calls"]) > 0
             if finish is not None and (delta.get("content") or has_tc or choice.get("finish_reason") is not None):
