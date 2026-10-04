@@ -49,9 +49,9 @@ are the behavioral oracle; language runners may add native cancellation and
 resource-cleanup checks. No IDL, code generation, or schema framework.
 
 Implemented files: `requests/openai-text.json` (one request),
-`responses/openai-text.json` (six responses), and `errors/openai-http.json`
+`responses/openai-text.json` (nine responses), and `errors/openai-http.json`
 (thirteen HTTP errors). These synthetic wire examples are regression contracts,
-not claims of certification against any live provider. Run all 20 cases with
+not claims of certification against any live provider. Run all 23 cases with
 `npm test --prefix typescript`. Capabilities remain placeholders.
 
 Listing: `models/ollama-tags.json` (8 cases: single/multiple/metadata/empty/malformed) and `models/openai-models.json` (9 cases: single/multiple/sparse/empty/malformed). Coverage includes provider metadata, defensive sparse objects, and ProtocolError for malformed successful payloads.

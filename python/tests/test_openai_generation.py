@@ -23,6 +23,52 @@ def try_connect(*a, **kw):
 
 
 class OpenAIGeneration(unittest.TestCase):
+    def test_object_tool_arguments_are_normalized_and_other_shapes_rejected(self):
+        if not HAS_CONDUIT:
+            self.skipTest("conduit not implemented")
+        c = try_connect(driver="openai-compatible", endpoint="http://127.0.0.1:9/v1")
+        m = c.model("m")
+        body = {"id": "x", "model": "m", "choices": [{"message": {"role": "assistant", "content": None, "tool_calls": [{"id": "call", "type": "function", "function": {"name": "fn", "arguments": {"city": "Paris"}}}]}, "finish_reason": "tool_calls"}]}
+        patches = mock_http_client(lambda *a, **kw: (200, {"content-type": "application/json"}, body))
+        patches[0].start(); patches[1].start()
+        try:
+            result = m.generate(messages=[{"role": "user", "content": "hi"}])
+            self.assertEqual(result.content[0]["arguments"], {"city": "Paris"})
+        finally:
+            patches[0].stop(); patches[1].stop()
+        for bad in ([], 1, True, None):
+            bad_body = {**body, "choices": [{**body["choices"][0], "message": {**body["choices"][0]["message"], "tool_calls": [{"id": "call", "type": "function", "function": {"name": "fn", "arguments": bad}}]}}]}
+            patches = mock_http_client(lambda *a, bad_body=bad_body, **kw: (200, {"content-type": "application/json"}, bad_body))
+            patches[0].start(); patches[1].start()
+            try:
+                with self.assertRaises(ConduitError) as cm:
+                    m.generate(messages=[{"role": "user", "content": "hi"}])
+                self.assertEqual(cm.exception.name, "ProtocolError")
+            finally:
+                patches[0].stop(); patches[1].stop()
+
+    def test_shared_tool_response_cases(self):
+        if not HAS_CONDUIT:
+            self.skipTest("conduit not implemented")
+        fixtures = json.loads((pathlib.Path(__file__).parents[2] / "conformance/responses/openai-text.json").read_text())
+        cases = [f for f in fixtures if f["id"].startswith("tool-call-")]
+        c = try_connect(driver="openai-compatible", endpoint="http://127.0.0.1:9/v1")
+        m = c.model("m")
+        for case in cases:
+            body = case["input"]["wire"]["body"]
+            patches = mock_http_client(lambda *a, body=body, **kw: (200, {"content-type": "application/json"}, body))
+            patches[0].start(); patches[1].start()
+            try:
+                if "error" in case["expected"]:
+                    with self.assertRaises(ConduitError) as cm:
+                        m.generate(messages=[{"role": "user", "content": "hi"}])
+                    self.assertEqual(cm.exception.name, case["expected"]["error"]["category"])
+                else:
+                    result = m.generate(messages=[{"role": "user", "content": "hi"}])
+                    self.assertEqual(result.content, case["expected"]["response"]["content"])
+            finally:
+                patches[0].stop(); patches[1].stop()
+
     def test_request_mapping_preserves_messages_and_common_fields(self):
         # Mirrors conformance/requests/openai-text.json expected.wire_request
         fixture = json.loads((pathlib.Path(__file__).parents[2] / "conformance/requests/openai-text.json").read_text())

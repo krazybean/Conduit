@@ -267,5 +267,81 @@
         }
       }
     }
+  },
+  {
+    "id": "tool-call-string-arguments",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {"x-request-id": "request-tool"},
+        "body": {
+          "id": "completion-tool",
+          "model": "test-model",
+          "choices": [{
+            "message": {"role": "assistant", "content": null, "tool_calls": [{"id": "call-tool", "type": "function", "function": {"name": "lookup", "arguments": "{\"city\":\"Paris\"}"}}]},
+            "finish_reason": "tool_calls"
+          }]
+        }
+      }
+    },
+    "expected": {
+      "response": {
+        "id": "completion-tool",
+        "model": "test-model",
+        "content": [{"type": "tool_call", "id": "call-tool", "name": "lookup", "arguments": {"city": "Paris"}}],
+        "finish_reason": "tool_call",
+        "provider_metadata": {"finish_reason": "tool_calls", "request_id": "request-tool"}
+      }
+    }
+  },
+  {
+    "id": "tool-call-object-arguments",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {"x-request-id": "request-tool"},
+        "body": {
+          "id": "completion-tool",
+          "model": "test-model",
+          "choices": [{
+            "message": {"role": "assistant", "content": null, "tool_calls": [{"id": "call-tool", "type": "function", "function": {"name": "lookup", "arguments": {"city": "Paris"}}}]},
+            "finish_reason": "tool_calls"
+          }]
+        }
+      }
+    },
+    "expected": {
+      "response": {
+        "id": "completion-tool",
+        "model": "test-model",
+        "content": [{"type": "tool_call", "id": "call-tool", "name": "lookup", "arguments": {"city": "Paris"}}],
+        "finish_reason": "tool_call",
+        "provider_metadata": {"finish_reason": "tool_calls", "request_id": "request-tool"}
+      }
+    }
+  },
+  {
+    "id": "tool-call-unsupported-arguments",
+    "driver": "openai-compatible",
+    "operation": "generate",
+    "input": {
+      "wire": {
+        "status": 200,
+        "headers": {"x-request-id": "request-tool"},
+        "body": {
+          "id": "completion-tool",
+          "model": "test-model",
+          "choices": [{
+            "message": {"role": "assistant", "content": null, "tool_calls": [{"id": "call-tool", "type": "function", "function": {"name": "lookup", "arguments": null}}]},
+            "finish_reason": "tool_calls"
+          }]
+        }
+      }
+    },
+    "expected": {"error": {"category": "ProtocolError"}}
   }
 ]

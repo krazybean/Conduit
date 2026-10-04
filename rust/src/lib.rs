@@ -124,6 +124,39 @@ fn http_failure(
     e
 }
 
+fn normalize_openai_models(
+    data: &[Value],
+    redact: &dyn Fn(&str) -> String,
+) -> Result<Vec<ModelInfo>, ConduitError> {
+    let mut out = Vec::new();
+    for entry in data {
+        let obj = entry.as_object().ok_or_else(|| {
+            ConduitError::new(
+                "ProtocolError",
+                "Malformed or unsupported model listing response.",
+            )
+        })?;
+        let id = obj.get("id").and_then(|v| v.as_str()).ok_or_else(|| {
+            ConduitError::new(
+                "ProtocolError",
+                "Malformed or unsupported model listing response.",
+            )
+        })?;
+        let mut provider_metadata = HashMap::new();
+        for (key, value) in obj {
+            if key != "id" {
+                provider_metadata.insert(key.clone(), value.clone());
+            }
+        }
+        out.push(ModelInfo {
+            id: redact(id),
+            name: None,
+            provider_metadata: (!provider_metadata.is_empty()).then_some(provider_metadata),
+        });
+    }
+    Ok(out)
+}
+
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -996,16 +1029,24 @@ fn decode_openai(
                     )
                 })?
                 .to_string();
-            let args_s = f.get("arguments").and_then(|v| v.as_str()).unwrap_or("");
-            let args: Value = if args_s.is_empty() {
-                Value::Object(Default::default())
-            } else {
-                serde_json::from_str(args_s).map_err(|_| {
+            let args = match f.get("arguments") {
+                None => Value::Object(Default::default()),
+                Some(Value::String(args_s)) if args_s.is_empty() => {
+                    Value::Object(Default::default())
+                }
+                Some(Value::String(args_s)) => serde_json::from_str(args_s).map_err(|_| {
                     ConduitError::new(
                         "ProtocolError",
                         "Malformed or unsupported Chat Completions response.",
                     )
-                })?
+                })?,
+                Some(Value::Object(args)) => Value::Object(args.clone()),
+                Some(_) => {
+                    return Err(ConduitError::new(
+                        "ProtocolError",
+                        "Malformed or unsupported Chat Completions response.",
+                    ))
+                }
             };
             content.push(ContentPart::ToolCall(ToolCallPart {
                 part_type: "tool_call".to_string(),
@@ -4499,8 +4540,8 @@ pub fn connect(mut config: ClientConfig) -> Result<Arc<Client>, ConduitError> {
     let base = config.endpoint.trim_end_matches('/');
     let (url, list_url) = match driver {
         Driver::OpenAICompatible => (
-            format!("{}/v1/chat/completions", base),
-            format!("{}/v1/models", base),
+            format!("{}/chat/completions", base),
+            format!("{}/models", base),
         ),
         Driver::Ollama => (format!("{}/api/chat", base), format!("{}/api/tags", base)),
         Driver::Anthropic => (
@@ -4587,25 +4628,7 @@ impl Client {
                         "Malformed or unsupported model listing response.",
                     )
                 })?;
-                let mut out = Vec::new();
-                for entry in data {
-                    let id = entry
-                        .get("id")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| {
-                            ConduitError::new(
-                                "ProtocolError",
-                                "Malformed or unsupported model listing response.",
-                            )
-                        })?
-                        .to_string();
-                    out.push(ModelInfo {
-                        id: (self.redact)(&id),
-                        name: None,
-                        provider_metadata: None,
-                    });
-                }
-                Ok(out)
+                normalize_openai_models(data, &*self.redact)
             }
             Driver::Ollama => {
                 let (status, headers, body) =
@@ -5142,6 +5165,14 @@ fn openai_sse_stream<R: BufRead + Send + 'static>(
                                 if let Some(f) = tc.get("function").and_then(|v| v.as_object()) {
                                     if let Some(n) = f.get("name").and_then(|v| v.as_str()) {
                                         entry.insert("name".to_string(), n.to_string());
+                                    }
+                                    if let Some(a) = f.get("arguments") {
+                                        if !a.is_string() {
+                                            return Some(Err(ConduitError::new(
+                                                "ProtocolError",
+                                                "Malformed or incomplete Chat Completions stream.",
+                                            )));
+                                        }
                                     }
                                     if let Some(a) = f.get("arguments").and_then(|v| v.as_str()) {
                                         let cur =
@@ -6262,7 +6293,7 @@ mod tests {
         });
         let cfg = ClientConfig {
             driver: "openai-compatible".to_string(),
-            endpoint: format!("http://{}", addr),
+            endpoint: format!("http://{}/v1", addr),
             credentials: None,
             headers: None,
             timeout: Some(5000),
@@ -6466,6 +6497,73 @@ mod tests {
         // Our decode should keep id as None when missing, not fabricate
         assert_eq!(tc2[0].id, None);
         handle2.join().unwrap();
+    }
+
+    #[test]
+    fn openai_object_tool_arguments_are_normalized_and_streaming_stays_strict() {
+        let body = serde_json::json!({
+            "id": "id",
+            "model": "m",
+            "choices": [{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call","type":"function","function":{"name":"fn","arguments":{"city":"Paris"}}}]},"finish_reason":"tool_calls"}]
+        });
+        let response = decode_openai(body.clone(), None, &|value| value.to_string()).unwrap();
+        assert_eq!(
+            response.tool_calls()[0].arguments,
+            serde_json::json!({"city":"Paris"})
+        );
+
+        for arguments in [
+            serde_json::json!([]),
+            serde_json::json!(1),
+            serde_json::json!(true),
+            serde_json::Value::Null,
+        ] {
+            let mut invalid = body.clone();
+            invalid["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"] = arguments;
+            assert_eq!(
+                decode_openai(invalid, None, &|value| value.to_string())
+                    .unwrap_err()
+                    .name,
+                "ProtocolError"
+            );
+        }
+
+        let fixtures: serde_json::Value =
+            serde_json::from_str(include_str!("../../conformance/responses/openai-text.json"))
+                .unwrap();
+        for id in [
+            "tool-call-string-arguments",
+            "tool-call-object-arguments",
+            "tool-call-unsupported-arguments",
+        ] {
+            let case = fixtures
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|case| case["id"] == id)
+                .unwrap();
+            let result = decode_openai(case["input"]["wire"]["body"].clone(), None, &|value| {
+                value.to_string()
+            });
+            if case["expected"].get("error").is_some() {
+                assert_eq!(result.unwrap_err().name, "ProtocolError");
+            } else {
+                assert_eq!(
+                    result.unwrap().tool_calls()[0].arguments,
+                    serde_json::json!({"city":"Paris"})
+                );
+            }
+        }
+
+        let stream = b"data: {\"id\":\"id\",\"model\":\"m\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"name\":\"fn\",\"arguments\":{\"city\":\"Paris\"}}}]},\"finish_reason\":null}]}\n\ndata: [DONE]\n\n";
+        let mut events = openai_sse_stream(
+            std::io::Cursor::new(stream),
+            None,
+            Arc::new(|value| value.to_string()),
+            None,
+            None,
+        );
+        assert_eq!(events.next().unwrap().unwrap_err().name, "ProtocolError");
     }
 
     #[test]
@@ -8504,6 +8602,36 @@ mod tests {
             ..Default::default()
         };
         assert!(connect(cfg).is_err());
+    }
+    #[test]
+    fn test_openai_endpoint_preserves_api_base_path() {
+        let client = connect(ClientConfig::openai_compatible(
+            "http://localhost:8080/v1/",
+            "model-name",
+        ))
+        .unwrap();
+        assert_eq!(client.url, "http://localhost:8080/v1/chat/completions");
+        assert_eq!(client.list_url, "http://localhost:8080/v1/models");
+    }
+    #[test]
+    fn test_openai_model_metadata_is_preserved() {
+        let data = vec![serde_json::json!({
+            "id": "model-name",
+            "object": "model",
+            "owned_by": "llamacpp",
+            "meta": {"n_ctx_train": 32768}
+        })];
+        let models = normalize_openai_models(&data, &|value| value.to_string()).unwrap();
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].id, "model-name");
+        assert_eq!(
+            models[0].provider_metadata.as_ref().unwrap()["meta"]["n_ctx_train"],
+            32768
+        );
+        assert_eq!(
+            models[0].provider_metadata.as_ref().unwrap()["owned_by"],
+            "llamacpp"
+        );
     }
     #[test]
     fn test_generate_string_shorthand() {
