@@ -6293,7 +6293,7 @@ mod tests {
         });
         let cfg = ClientConfig {
             driver: "openai-compatible".to_string(),
-            endpoint: format!("http://{}", addr),
+            endpoint: format!("http://{}/v1", addr),
             credentials: None,
             headers: None,
             timeout: Some(5000),
