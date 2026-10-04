@@ -100,7 +100,8 @@
               "id": "llama-3.2-3b",
               "object": "model",
               "created": 1700000000,
-              "owned_by": "lm-studio"
+              "owned_by": "llamacpp",
+              "meta": { "n_ctx_train": 32768 }
             }
           ]
         }
@@ -113,7 +114,8 @@
           "provider_metadata": {
             "object": "model",
             "created": 1700000000,
-            "owned_by": "lm-studio"
+            "owned_by": "llamacpp",
+            "meta": { "n_ctx_train": 32768 }
           }
         }
       ]

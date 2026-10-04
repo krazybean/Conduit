@@ -124,6 +124,39 @@ fn http_failure(
     e
 }
 
+fn normalize_openai_models(
+    data: &[Value],
+    redact: &dyn Fn(&str) -> String,
+) -> Result<Vec<ModelInfo>, ConduitError> {
+    let mut out = Vec::new();
+    for entry in data {
+        let obj = entry.as_object().ok_or_else(|| {
+            ConduitError::new(
+                "ProtocolError",
+                "Malformed or unsupported model listing response.",
+            )
+        })?;
+        let id = obj.get("id").and_then(|v| v.as_str()).ok_or_else(|| {
+            ConduitError::new(
+                "ProtocolError",
+                "Malformed or unsupported model listing response.",
+            )
+        })?;
+        let mut provider_metadata = HashMap::new();
+        for (key, value) in obj {
+            if key != "id" {
+                provider_metadata.insert(key.clone(), value.clone());
+            }
+        }
+        out.push(ModelInfo {
+            id: redact(id),
+            name: None,
+            provider_metadata: (!provider_metadata.is_empty()).then_some(provider_metadata),
+        });
+    }
+    Ok(out)
+}
+
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -4499,8 +4532,8 @@ pub fn connect(mut config: ClientConfig) -> Result<Arc<Client>, ConduitError> {
     let base = config.endpoint.trim_end_matches('/');
     let (url, list_url) = match driver {
         Driver::OpenAICompatible => (
-            format!("{}/v1/chat/completions", base),
-            format!("{}/v1/models", base),
+            format!("{}/chat/completions", base),
+            format!("{}/models", base),
         ),
         Driver::Ollama => (format!("{}/api/chat", base), format!("{}/api/tags", base)),
         Driver::Anthropic => (
@@ -4587,25 +4620,7 @@ impl Client {
                         "Malformed or unsupported model listing response.",
                     )
                 })?;
-                let mut out = Vec::new();
-                for entry in data {
-                    let id = entry
-                        .get("id")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| {
-                            ConduitError::new(
-                                "ProtocolError",
-                                "Malformed or unsupported model listing response.",
-                            )
-                        })?
-                        .to_string();
-                    out.push(ModelInfo {
-                        id: (self.redact)(&id),
-                        name: None,
-                        provider_metadata: None,
-                    });
-                }
-                Ok(out)
+                normalize_openai_models(data, &*self.redact)
             }
             Driver::Ollama => {
                 let (status, headers, body) =
@@ -8504,6 +8519,36 @@ mod tests {
             ..Default::default()
         };
         assert!(connect(cfg).is_err());
+    }
+    #[test]
+    fn test_openai_endpoint_preserves_api_base_path() {
+        let client = connect(ClientConfig::openai_compatible(
+            "http://localhost:8080/v1/",
+            "model-name",
+        ))
+        .unwrap();
+        assert_eq!(client.url, "http://localhost:8080/v1/chat/completions");
+        assert_eq!(client.list_url, "http://localhost:8080/v1/models");
+    }
+    #[test]
+    fn test_openai_model_metadata_is_preserved() {
+        let data = vec![serde_json::json!({
+            "id": "model-name",
+            "object": "model",
+            "owned_by": "llamacpp",
+            "meta": {"n_ctx_train": 32768}
+        })];
+        let models = normalize_openai_models(&data, &|value| value.to_string()).unwrap();
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].id, "model-name");
+        assert_eq!(
+            models[0].provider_metadata.as_ref().unwrap()["meta"]["n_ctx_train"],
+            32768
+        );
+        assert_eq!(
+            models[0].provider_metadata.as_ref().unwrap()["owned_by"],
+            "llamacpp"
+        );
     }
     #[test]
     fn test_generate_string_shorthand() {
