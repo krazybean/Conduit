@@ -111,6 +111,7 @@ export async function* openaiStream(
       const delta = choice.delta as Record<string, unknown>;
       if (delta.role !== undefined && delta.role !== "assistant") protocol();
       if (delta.content != null && typeof delta.content !== "string") protocol();
+      if (delta.reasoning_content != null && typeof delta.reasoning_content !== "string") protocol();
       // Validate tool_calls delta if present
       if (delta.tool_calls !== undefined) {
         if (!Array.isArray(delta.tool_calls)) protocol();
@@ -132,7 +133,7 @@ export async function* openaiStream(
           if (tid === undefined && tfn === undefined) protocol();
         }
       }
-      if (Object.entries(delta).some(([key, data]) => !["role", "content", "tool_calls"].includes(key) && data != null)) protocol();
+      if (Object.entries(delta).some(([key, data]) => !["role", "content", "reasoning_content", "tool_calls"].includes(key) && data != null)) protocol();
       const hasToolCalls = Array.isArray(delta.tool_calls) && (delta.tool_calls as unknown[]).length > 0;
       if (finish !== undefined && (delta.content || hasToolCalls || choice.finish_reason != null)) protocol();
       if (choice.finish_reason != null && typeof choice.finish_reason !== "string") protocol();

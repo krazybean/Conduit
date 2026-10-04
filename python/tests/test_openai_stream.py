@@ -76,6 +76,14 @@ class SSEFragmentationContract(unittest.TestCase):
             list(conduit._parse_openai_stream_incremental(iter([payload.encode()]), None, lambda value: value))
         self.assertEqual(cm.exception.name, "ProtocolError")
 
+    def test_reasoning_content_is_ignored_in_streaming(self):
+        if not HAS or not hasattr(conduit, "_parse_openai_stream_incremental"):
+            self.skipTest("no exposed incremental parser")
+        payload = sse_data({"id": "reasoning", "model": "m", "choices": [{"index": 0, "delta": {"role": "assistant", "reasoning_content": "hidden"}, "finish_reason": None}]})
+        payload += sse_data({"choices": [{"index": 0, "delta": {"content": "OK"}, "finish_reason": "stop"}]}) + "data: [DONE]\n\n"
+        events = list(conduit._parse_openai_stream_incremental(iter([payload.encode()]), None, lambda value: value))
+        self.assertEqual(events[-1]["response"].text, "OK")
+
     def test_live_stream_with_exact_fragment_boundaries(self):
         import base64, time
         try:

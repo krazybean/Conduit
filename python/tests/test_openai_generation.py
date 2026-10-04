@@ -69,6 +69,21 @@ class OpenAIGeneration(unittest.TestCase):
             finally:
                 patches[0].stop(); patches[1].stop()
 
+    def test_provider_reasoning_and_empty_tools_are_ignored(self):
+        if not HAS_CONDUIT:
+            self.skipTest("conduit not implemented")
+        fixtures = json.loads((pathlib.Path(__file__).parents[2] / "conformance/responses/openai-text.json").read_text())
+        case = next(f for f in fixtures if f["id"] == "provider-reasoning-and-empty-tools")
+        c = try_connect(driver="openai-compatible", endpoint="http://127.0.0.1:9/v1")
+        patches = mock_http_client(lambda *a, **kw: (200, {"content-type": "application/json"}, case["input"]["wire"]["body"]))
+        patches[0].start(); patches[1].start()
+        try:
+            result = c.model("m").generate(messages=[{"role": "user", "content": "hi"}])
+            self.assertEqual(result.content, case["expected"]["response"]["content"])
+            self.assertEqual(result.finish_reason, "stop")
+        finally:
+            patches[0].stop(); patches[1].stop()
+
     def test_request_mapping_preserves_messages_and_common_fields(self):
         # Mirrors conformance/requests/openai-text.json expected.wire_request
         fixture = json.loads((pathlib.Path(__file__).parents[2] / "conformance/requests/openai-text.json").read_text())

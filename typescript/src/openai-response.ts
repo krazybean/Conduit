@@ -24,9 +24,8 @@ export function decode(value: unknown, requestId: string | undefined, redact: (t
   const choice: unknown = value.choices[0];
   if (!object(choice) || !object(choice.message) || choice.message.role !== "assistant" || typeof choice.finish_reason !== "string") protocol();
   const message = choice.message as Record<string, unknown>;
-  const hasToolCalls = Array.isArray(message.tool_calls);
-  if (hasToolCalls) {
-    if ((message.tool_calls as unknown[]).length === 0) protocol();
+  const hasToolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
+  if (Array.isArray(message.tool_calls)) {
     for (const tc of message.tool_calls as unknown[]) {
       if (!object(tc) || typeof tc.id !== "string" || tc.type !== "function" || !object(tc.function) || typeof tc.function.name !== "string") protocol();
       const args = tc.function.arguments;
@@ -38,7 +37,8 @@ export function decode(value: unknown, requestId: string | undefined, redact: (t
         protocol();
       }
     }
-  } else if (Object.entries(message).some(([key, data]) => !["role", "content"].includes(key) && data != null && !(key === "tool_calls" && Array.isArray(data) && data.length === 0))) protocol();
+  } else if (Object.entries(message).some(([key, data]) => !["role", "content", "reasoning_content"].includes(key) && data != null && !(key === "tool_calls" && Array.isArray(data) && data.length === 0))) protocol();
+  if (message.reasoning_content !== undefined && message.reasoning_content !== null && typeof message.reasoning_content !== "string") protocol();
   if (typeof message.content !== "string" && !(message.content === null && (choice.finish_reason === "content_filter" || hasToolCalls))) protocol();
   // When tool_calls present, content may be empty string or null
   if (hasToolCalls && typeof message.content === "string" && message.content !== "" && (message.content as string).length > 0) {
