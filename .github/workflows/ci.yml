@@ -36,4 +36,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
+      - run: rustc --version
+      - run: cargo --version
+      - run: grep -n 'ureq' rust/Cargo.toml
+      - run: cargo tree --manifest-path rust/Cargo.toml -i ureq
+      - run: cargo metadata --manifest-path rust/Cargo.toml --format-version 1 | grep -o '"name":"ureq","version":"[^"]*"'
       - run: cargo test --manifest-path rust/Cargo.toml
