@@ -38,6 +38,25 @@ Can a developer add local or hosted AI access to a new application in roughly te
 
 Python distribution is `conduit-llm`, but imports remain `conduit`. Rust distribution is `conduit-ai`, but the crate remains `conduit`.
 
+## Releases
+
+Prepare a synchronized release from a clean worktree:
+
+```sh
+./scripts/prepare-release.sh 0.2.3
+```
+
+Review and merge the release PR normally. Then publish from clean, synchronized
+`main`:
+
+```sh
+./scripts/publish-release.sh 0.2.3 release-notes.md
+```
+
+Publication stops at the first registry failure and creates the tag only after
+npm, PyPI, and crates.io all succeed. Without a notes file, the GitHub release
+uses the minimal title `Conduit vX.Y.Z`.
+
 ## Quick Start
 
 **TypeScript**
