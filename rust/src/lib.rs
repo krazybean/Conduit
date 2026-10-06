@@ -643,6 +643,30 @@ fn text_response(_fields: serde_json::Map<String, Value>) -> GenerationResponse 
 // ---------------------------------------------------------------------------
 // HTTP — whole-operation deadline
 // ---------------------------------------------------------------------------
+fn ureq_transport_error(error: ureq::Error, deadline: Option<Instant>) -> ConduitError {
+    let timed_out = match &error {
+        ureq::Error::Timeout(_) => true,
+        ureq::Error::Io(error) => error.kind() == std::io::ErrorKind::TimedOut,
+        _ => false,
+    };
+    if timed_out && deadline.is_some() {
+        return ConduitError::new("TimeoutError", "Request deadline exceeded.");
+    }
+    let mut cause = HashMap::new();
+    cause.insert("name".to_string(), "TransportError".to_string());
+    cause.insert("message".to_string(), "[REDACTED]".to_string());
+    ConduitError::new("ConnectionError", "Provider connection failed.").with_cause(cause)
+}
+
+fn stream_read_error(error: std::io::Error, deadline: Option<Instant>) -> ConduitError {
+    if error.kind() == std::io::ErrorKind::TimedOut || deadline.is_some_and(|d| Instant::now() >= d)
+    {
+        ConduitError::new("TimeoutError", "Request deadline exceeded.")
+    } else {
+        ConduitError::new("ConnectionError", "Provider connection failed.")
+    }
+}
+
 #[allow(
     unused_variables,
     clippy::type_complexity,
@@ -668,57 +692,36 @@ fn do_http(
     let remaining = deadline
         .map(|d| d.saturating_duration_since(Instant::now()))
         .unwrap_or(Duration::from_secs(30));
-    let agent = ureq::AgentBuilder::new().timeout(remaining).build();
-    let req = match method {
-        "GET" => agent.get(url),
-        "POST" => agent.post(url),
-        _ => agent.request(method, url),
-    };
-    let mut req = req;
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(remaining))
+        .http_status_as_error(false)
+        .build()
+        .into();
+    let mut builder = ureq::http::Request::builder().method(method).uri(url);
     for (k, v) in headers {
-        req = req.set(k, v);
+        builder = builder.header(k, v);
     }
     let resp = if let Some(b) = body {
-        req.send_string(b)
+        let req = builder
+            .body(b.to_string())
+            .map_err(|e| ureq_transport_error(ureq::Error::Http(e), deadline))?;
+        agent.run(req)
     } else {
-        req.call()
+        let req = builder
+            .body(())
+            .map_err(|e| ureq_transport_error(ureq::Error::Http(e), deadline))?;
+        agent.run(req)
     }
-    .map_err(|e| match e {
-        ureq::Error::Status(code, resp) => {
-            let mut buf = Vec::new();
-            let _ = resp.into_reader().read_to_end(&mut buf);
-            let _text = String::from_utf8_lossy(&buf).to_string();
-            // We need to return status for caller to handle, but ureq's Status error already consumes response
-            // For v0, map to ProviderError here with status
-            let mut details = HashMap::new();
-            details.insert(
-                "message".to_string(),
-                format!("Provider returned HTTP {}.", code),
-            );
-            http_failure(code, details, None, false)
-        }
-        ureq::Error::Transport(t) => {
-            let s = t.to_string();
-            if s.contains("timed out") || s.contains("Timeout") {
-                if deadline.is_some() {
-                    return ConduitError::new("TimeoutError", "Request deadline exceeded.");
-                }
-            }
-            let mut cause = HashMap::new();
-            cause.insert("name".to_string(), "TransportError".to_string());
-            cause.insert("message".to_string(), "[REDACTED]".to_string());
-            ConduitError::new("ConnectionError", "Provider connection failed.").with_cause(cause)
-        }
-    })?;
-    let status = resp.status();
+    .map_err(|e| ureq_transport_error(e, deadline))?;
+    let status = resp.status().as_u16();
     let mut hmap = HashMap::new();
-    for k in resp.headers_names() {
-        if let Some(v) = resp.header(&k) {
-            hmap.insert(k.to_lowercase(), v.to_string());
+    for (k, v) in resp.headers() {
+        if let Ok(v) = v.to_str() {
+            hmap.insert(k.as_str().to_lowercase(), v.to_string());
         }
     }
     let mut buf = Vec::new();
-    let mut reader = resp.into_reader();
+    let mut reader = resp.into_body().into_reader();
     let mut tmp = [0u8; 8192];
     loop {
         if let Some(d) = deadline {
@@ -1903,18 +1906,7 @@ fn ollama_ndjson_stream<R: BufRead + Send + 'static>(
                 self.line.clear();
                 let n = match self.reader.read_line(&mut self.line) {
                     Ok(n) => n,
-                    Err(e) => {
-                        if e.kind() == std::io::ErrorKind::TimedOut {
-                            return Some(Err(ConduitError::new(
-                                "TimeoutError",
-                                "Request deadline exceeded.",
-                            )));
-                        }
-                        return Some(Err(ConduitError::new(
-                            "ConnectionError",
-                            "Provider connection failed.",
-                        )));
-                    }
+                    Err(e) => return Some(Err(stream_read_error(e, self.deadline))),
                 };
                 if n == 0 {
                     if !self.started {
@@ -2547,18 +2539,7 @@ fn anthropic_sse_stream<R: BufRead + Send + 'static>(
                 self.line.clear();
                 let n = match self.reader.read_line(&mut self.line) {
                     Ok(n) => n,
-                    Err(e) => {
-                        if e.kind() == std::io::ErrorKind::TimedOut {
-                            return Some(Err(ConduitError::new(
-                                "TimeoutError",
-                                "Request deadline exceeded.",
-                            )));
-                        }
-                        return Some(Err(ConduitError::new(
-                            "ConnectionError",
-                            "Provider connection failed.",
-                        )));
-                    }
+                    Err(e) => return Some(Err(stream_read_error(e, self.deadline))),
                 };
                 if n == 0 {
                     if !self.started {
@@ -3917,18 +3898,7 @@ fn gemini_sse_stream<R: BufRead + Send + 'static>(
                 self.line.clear();
                 let n = match self.reader.read_line(&mut self.line) {
                     Ok(n) => n,
-                    Err(e) => {
-                        if e.kind() == std::io::ErrorKind::TimedOut {
-                            return Some(Err(ConduitError::new(
-                                "TimeoutError",
-                                "Request deadline exceeded.",
-                            )));
-                        }
-                        return Some(Err(ConduitError::new(
-                            "ConnectionError",
-                            "Provider connection failed.",
-                        )));
-                    }
+                    Err(e) => return Some(Err(stream_read_error(e, self.deadline))),
                 };
                 if n == 0 {
                     // EOF: finalize
@@ -4920,18 +4890,7 @@ fn openai_sse_stream<R: BufRead + Send + 'static>(
                 self.line.clear();
                 let n = match self.reader.read_line(&mut self.line) {
                     Ok(n) => n,
-                    Err(e) => {
-                        if e.kind() == std::io::ErrorKind::TimedOut {
-                            return Some(Err(ConduitError::new(
-                                "TimeoutError",
-                                "Request deadline exceeded.",
-                            )));
-                        }
-                        return Some(Err(ConduitError::new(
-                            "ConnectionError",
-                            "Provider connection failed.",
-                        )));
-                    }
+                    Err(e) => return Some(Err(stream_read_error(e, self.deadline))),
                 };
                 if n == 0 {
                     if !self.started {
@@ -5545,47 +5504,33 @@ impl Model {
                 let remaining = deadline
                     .map(|d| d.saturating_duration_since(Instant::now()))
                     .unwrap_or(Duration::from_secs(30));
-                let agent = ureq::AgentBuilder::new().timeout(remaining).build();
+                let agent: ureq::Agent = ureq::Agent::config_builder()
+                    .timeout_global(Some(remaining))
+                    .http_status_as_error(false)
+                    .build()
+                    .into();
                 let mut ureq_req = agent.post(&self.client.url);
                 for (k, v) in &self.client.headers {
-                    ureq_req = ureq_req.set(k, v);
+                    ureq_req = ureq_req.header(k, v);
                 }
-                let resp = ureq_req.send_string(&body_str).map_err(|e| match e {
-                    ureq::Error::Status(code, resp) => {
-                        let mut buf = Vec::new();
-                        let _ = resp.into_reader().read_to_end(&mut buf);
-                        let text = String::from_utf8_lossy(&buf).to_string();
-                        http_error_openai(code, &text, None, &*self.client.redact)
-                    }
-                    ureq::Error::Transport(t) => {
-                        let s = t.to_string();
-                        if (s.contains("timed out") || s.contains("Timeout")) && deadline.is_some()
-                        {
-                            ConduitError::new("TimeoutError", "Request deadline exceeded.")
-                        } else {
-                            let mut cause = HashMap::new();
-                            cause.insert("name".to_string(), "TransportError".to_string());
-                            cause.insert("message".to_string(), "[REDACTED]".to_string());
-                            ConduitError::new("ConnectionError", "Provider connection failed.")
-                                .with_cause(cause)
-                        }
-                    }
-                })?;
-                let status = resp.status();
+                let resp = ureq_req
+                    .send(&body_str)
+                    .map_err(|e| ureq_transport_error(e, deadline))?;
+                let status = resp.status().as_u16();
                 let mut hmap = HashMap::new();
-                for k in resp.headers_names() {
-                    if let Some(v) = resp.header(&k) {
-                        hmap.insert(k.to_lowercase(), v.to_string());
+                for (k, v) in resp.headers() {
+                    if let Ok(v) = v.to_str() {
+                        hmap.insert(k.as_str().to_lowercase(), v.to_string());
                     }
                 }
                 let rid = hmap
                     .get("x-request-id")
                     .or(hmap.get("request-id"))
                     .cloned()
-                    .map(|v| (self.client.redact)(&v));
+                    .map(|v| (self.client.redact)(v.as_str()));
                 if !(200..300).contains(&status) {
                     let mut buf = Vec::new();
-                    let mut r = resp.into_reader();
+                    let mut r = resp.into_body().into_reader();
                     let _ = r.read_to_end(&mut buf);
                     let text = String::from_utf8_lossy(&buf).to_string();
                     return Err(http_error_openai(status, &text, rid, &*self.client.redact));
@@ -5600,7 +5545,7 @@ impl Model {
                         "Expected a text/event-stream response.",
                     ));
                 }
-                let reader = resp.into_reader();
+                let reader = resp.into_body().into_reader();
                 let red = self.client.redact.clone();
                 let rid2 = rid.clone();
                 let buf_reader = Box::new(BufReader::new(reader)) as Box<dyn BufRead + Send>;
@@ -5621,47 +5566,33 @@ impl Model {
                 let remaining = deadline
                     .map(|d| d.saturating_duration_since(Instant::now()))
                     .unwrap_or(Duration::from_secs(30));
-                let agent = ureq::AgentBuilder::new().timeout(remaining).build();
+                let agent: ureq::Agent = ureq::Agent::config_builder()
+                    .timeout_global(Some(remaining))
+                    .http_status_as_error(false)
+                    .build()
+                    .into();
                 let mut ureq_req = agent.post(&self.client.url);
                 for (k, v) in &self.client.headers {
-                    ureq_req = ureq_req.set(k, v);
+                    ureq_req = ureq_req.header(k, v);
                 }
-                let resp = ureq_req.send_string(&body_str).map_err(|e| match e {
-                    ureq::Error::Status(code, resp) => {
-                        let mut buf = Vec::new();
-                        let _ = resp.into_reader().read_to_end(&mut buf);
-                        let text = String::from_utf8_lossy(&buf).to_string();
-                        anthropic_error(code, &text, None, &*self.client.redact)
-                    }
-                    ureq::Error::Transport(t) => {
-                        let s = t.to_string();
-                        if (s.contains("timed out") || s.contains("Timeout")) && deadline.is_some()
-                        {
-                            ConduitError::new("TimeoutError", "Request deadline exceeded.")
-                        } else {
-                            let mut cause = HashMap::new();
-                            cause.insert("name".to_string(), "TransportError".to_string());
-                            cause.insert("message".to_string(), "[REDACTED]".to_string());
-                            ConduitError::new("ConnectionError", "Provider connection failed.")
-                                .with_cause(cause)
-                        }
-                    }
-                })?;
-                let status = resp.status();
+                let resp = ureq_req
+                    .send(&body_str)
+                    .map_err(|e| ureq_transport_error(e, deadline))?;
+                let status = resp.status().as_u16();
                 let mut hmap = HashMap::new();
-                for k in resp.headers_names() {
-                    if let Some(v) = resp.header(&k) {
-                        hmap.insert(k.to_lowercase(), v.to_string());
+                for (k, v) in resp.headers() {
+                    if let Ok(v) = v.to_str() {
+                        hmap.insert(k.as_str().to_lowercase(), v.to_string());
                     }
                 }
                 let rid = hmap
                     .get("x-request-id")
                     .or(hmap.get("request-id"))
                     .cloned()
-                    .map(|v| (self.client.redact)(&v));
+                    .map(|v| (self.client.redact)(v.as_str()));
                 if !(200..300).contains(&status) {
                     let mut buf = Vec::new();
-                    let mut r = resp.into_reader();
+                    let mut r = resp.into_body().into_reader();
                     let _ = r.read_to_end(&mut buf);
                     let text = String::from_utf8_lossy(&buf).to_string();
                     return Err(anthropic_error(status, &text, rid, &*self.client.redact));
@@ -5676,7 +5607,7 @@ impl Model {
                         "Expected a text/event-stream response.",
                     ));
                 }
-                let reader = resp.into_reader();
+                let reader = resp.into_body().into_reader();
                 let red = self.client.redact.clone();
                 let rid2 = rid.clone();
                 let buf_reader = Box::new(BufReader::new(reader)) as Box<dyn BufRead + Send>;
@@ -5698,7 +5629,11 @@ impl Model {
                 let remaining = deadline
                     .map(|d| d.saturating_duration_since(Instant::now()))
                     .unwrap_or(Duration::from_secs(30));
-                let agent = ureq::AgentBuilder::new().timeout(remaining).build();
+                let agent: ureq::Agent = ureq::Agent::config_builder()
+                    .timeout_global(Some(remaining))
+                    .http_status_as_error(false)
+                    .build()
+                    .into();
                 let fetch_url = format!(
                     "{}/{}:streamGenerateContent?alt=sse",
                     self.client.url.trim_end_matches('/'),
@@ -5706,44 +5641,26 @@ impl Model {
                 );
                 let mut ureq_req = agent.post(&fetch_url);
                 for (k, v) in &self.client.headers {
-                    ureq_req = ureq_req.set(k, v);
+                    ureq_req = ureq_req.header(k, v);
                 }
-                let resp = ureq_req.send_string(&body_str).map_err(|e| match e {
-                    ureq::Error::Status(code, resp) => {
-                        let mut buf = Vec::new();
-                        let _ = resp.into_reader().read_to_end(&mut buf);
-                        let text = String::from_utf8_lossy(&buf).to_string();
-                        gemini_error(code, &text, None, &*self.client.redact)
-                    }
-                    ureq::Error::Transport(t) => {
-                        let s = t.to_string();
-                        if (s.contains("timed out") || s.contains("Timeout")) && deadline.is_some()
-                        {
-                            ConduitError::new("TimeoutError", "Request deadline exceeded.")
-                        } else {
-                            let mut cause = HashMap::new();
-                            cause.insert("name".to_string(), "TransportError".to_string());
-                            cause.insert("message".to_string(), "[REDACTED]".to_string());
-                            ConduitError::new("ConnectionError", "Provider connection failed.")
-                                .with_cause(cause)
-                        }
-                    }
-                })?;
-                let status = resp.status();
+                let resp = ureq_req
+                    .send(&body_str)
+                    .map_err(|e| ureq_transport_error(e, deadline))?;
+                let status = resp.status().as_u16();
                 let mut hmap = HashMap::new();
-                for k in resp.headers_names() {
-                    if let Some(v) = resp.header(&k) {
-                        hmap.insert(k.to_lowercase(), v.to_string());
+                for (k, v) in resp.headers() {
+                    if let Ok(v) = v.to_str() {
+                        hmap.insert(k.as_str().to_lowercase(), v.to_string());
                     }
                 }
                 let rid = hmap
                     .get("x-request-id")
                     .or(hmap.get("request-id"))
                     .cloned()
-                    .map(|v| (self.client.redact)(&v));
+                    .map(|v| (self.client.redact)(v.as_str()));
                 if !(200..300).contains(&status) {
                     let mut buf = Vec::new();
-                    let mut r = resp.into_reader();
+                    let mut r = resp.into_body().into_reader();
                     let _ = r.read_to_end(&mut buf);
                     let text = String::from_utf8_lossy(&buf).to_string();
                     return Err(gemini_error(status, &text, rid, &*self.client.redact));
@@ -5758,7 +5675,7 @@ impl Model {
                         "Expected a text/event-stream response.",
                     ));
                 }
-                let reader = resp.into_reader();
+                let reader = resp.into_body().into_reader();
                 let red = self.client.redact.clone();
                 let rid2 = rid.clone();
                 let buf_reader = Box::new(BufReader::new(reader)) as Box<dyn BufRead + Send>;
@@ -5779,53 +5696,33 @@ impl Model {
                 let remaining = deadline
                     .map(|d| d.saturating_duration_since(Instant::now()))
                     .unwrap_or(Duration::from_secs(30));
-                let agent = ureq::AgentBuilder::new().timeout(remaining).build();
+                let agent: ureq::Agent = ureq::Agent::config_builder()
+                    .timeout_global(Some(remaining))
+                    .http_status_as_error(false)
+                    .build()
+                    .into();
                 let mut ureq_req = agent.post(&self.client.url);
                 for (k, v) in &self.client.headers {
-                    ureq_req = ureq_req.set(k, v);
+                    ureq_req = ureq_req.header(k, v);
                 }
-                let resp = ureq_req.send_string(&body_str).map_err(|e| match e {
-                    ureq::Error::Status(code, resp) => {
-                        let mut buf = Vec::new();
-                        let _ = resp.into_reader().read_to_end(&mut buf);
-                        let text = String::from_utf8_lossy(&buf).to_string();
-                        ollama_error(
-                            code,
-                            &text,
-                            None,
-                            &*self.client.redact,
-                            Some(&self.model_id),
-                        )
-                    }
-                    ureq::Error::Transport(t) => {
-                        let s = t.to_string();
-                        if (s.contains("timed out") || s.contains("Timeout")) && deadline.is_some()
-                        {
-                            ConduitError::new("TimeoutError", "Request deadline exceeded.")
-                        } else {
-                            let mut cause = HashMap::new();
-                            cause.insert("name".to_string(), "TransportError".to_string());
-                            cause.insert("message".to_string(), "[REDACTED]".to_string());
-                            ConduitError::new("ConnectionError", "Provider connection failed.")
-                                .with_cause(cause)
-                        }
-                    }
-                })?;
-                let status = resp.status();
+                let resp = ureq_req
+                    .send(&body_str)
+                    .map_err(|e| ureq_transport_error(e, deadline))?;
+                let status = resp.status().as_u16();
                 let mut hmap = HashMap::new();
-                for k in resp.headers_names() {
-                    if let Some(v) = resp.header(&k) {
-                        hmap.insert(k.to_lowercase(), v.to_string());
+                for (k, v) in resp.headers() {
+                    if let Ok(v) = v.to_str() {
+                        hmap.insert(k.as_str().to_lowercase(), v.to_string());
                     }
                 }
                 let rid = hmap
                     .get("x-request-id")
                     .or(hmap.get("request-id"))
                     .cloned()
-                    .map(|v| (self.client.redact)(&v));
+                    .map(|v| (self.client.redact)(v.as_str()));
                 if !(200..300).contains(&status) {
                     let mut buf = Vec::new();
-                    let mut r = resp.into_reader();
+                    let mut r = resp.into_body().into_reader();
                     let _ = r.read_to_end(&mut buf);
                     let text = String::from_utf8_lossy(&buf).to_string();
                     return Err(ollama_error(
@@ -5836,7 +5733,7 @@ impl Model {
                         Some(&self.model_id),
                     ));
                 }
-                let reader = resp.into_reader();
+                let reader = resp.into_body().into_reader();
                 let red = self.client.redact.clone();
                 let rid2 = rid.clone();
                 let buf_reader = Box::new(BufReader::new(reader)) as Box<dyn BufRead + Send>;
@@ -6325,6 +6222,107 @@ mod tests {
         assert_eq!(resp.finish_reason, "stop");
         assert_eq!(resp.usage.as_ref().unwrap().input_tokens, Some(1));
         handle.join().unwrap();
+    }
+
+    #[test]
+    fn openai_http_error_body_is_normalized_and_redacted() {
+        let secret = "sk-test-secret";
+        let (addr, handle) = start_server(move |mut stream| {
+            let (_, headers, _) = read_http_request(&mut stream);
+            assert!(headers
+                .to_ascii_lowercase()
+                .contains("authorization: bearer sk-test-secret"));
+            let resp_body = serde_json::json!({
+                "error": {
+                    "message": format!("invalid key {secret}"),
+                    "type": "invalid_request_error",
+                    "code": "invalid_api_key"
+                }
+            });
+            let body_str = serde_json::to_string(&resp_body).unwrap();
+            let resp = format!(
+                "HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nX-Request-Id: req-401\r\nContent-Length: {}\r\n\r\n{}",
+                body_str.len(),
+                body_str
+            );
+            stream.write_all(resp.as_bytes()).unwrap();
+            stream.flush().unwrap();
+        });
+        let cfg = ClientConfig {
+            driver: "openai-compatible".to_string(),
+            endpoint: format!("http://{addr}"),
+            credentials: Some(secret.to_string()),
+            headers: None,
+            timeout: Some(5000),
+            model: None,
+        };
+        let client = connect(cfg).unwrap();
+        let model = client.model("test-model").unwrap();
+        let err = model.generate("hi").unwrap_err();
+        assert_eq!(err.name, "ProviderError");
+        assert_eq!(err.status_code, Some(401));
+        assert_eq!(err.request_id.as_deref(), Some("req-401"));
+        assert!(err.cause.is_none());
+        let details = err.provider_details.unwrap();
+        assert_eq!(
+            details.get("type"),
+            Some(&"invalid_request_error".to_string())
+        );
+        assert_eq!(details.get("code"), Some(&"invalid_api_key".to_string()));
+        assert_eq!(
+            details.get("message"),
+            Some(&"invalid key [REDACTED]".to_string())
+        );
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn openai_redirect_does_not_forward_credentials() {
+        let (target_addr, target_handle) = start_server(|mut stream| {
+            let (_, headers, _) = read_http_request(&mut stream);
+            assert!(!headers
+                .to_ascii_lowercase()
+                .contains("authorization: bearer redirect-secret"));
+            let resp_body = serde_json::json!({
+                "id": "redirected",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "test-model",
+                "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}]
+            });
+            let body_str = serde_json::to_string(&resp_body).unwrap();
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                body_str.len(),
+                body_str
+            );
+            stream.write_all(resp.as_bytes()).unwrap();
+            stream.flush().unwrap();
+        });
+        let (redirect_addr, redirect_handle) = start_server(move |mut stream| {
+            let (_, headers, _) = read_http_request(&mut stream);
+            assert!(headers
+                .to_ascii_lowercase()
+                .contains("authorization: bearer redirect-secret"));
+            let resp = format!(
+                "HTTP/1.1 302 Found\r\nLocation: http://{target_addr}/v1/chat/completions\r\nContent-Length: 0\r\n\r\n"
+            );
+            stream.write_all(resp.as_bytes()).unwrap();
+            stream.flush().unwrap();
+        });
+        let cfg = ClientConfig {
+            driver: "openai-compatible".to_string(),
+            endpoint: format!("http://{redirect_addr}/v1"),
+            credentials: Some("redirect-secret".to_string()),
+            headers: None,
+            timeout: Some(5000),
+            model: None,
+        };
+        let client = connect(cfg).unwrap();
+        let model = client.model("test-model").unwrap();
+        assert_eq!(model.generate("hi").unwrap().text(), "ok");
+        redirect_handle.join().unwrap();
+        target_handle.join().unwrap();
     }
 
     #[test]
