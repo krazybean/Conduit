@@ -26,3 +26,15 @@ Exit criteria: Python suite and compile/type checks pass; no unnecessary compati
 Review both resulting boundaries and classify remaining work as SHOULD DO, MAYBE LATER, or LEAVE ALONE. Do not implement review recommendations in this pass.
 
 Exit criteria: final report documents moved tests, provider contract, validation, and stop point.
+
+## Chunk 4: Complete deferred client architecture cleanup
+
+Move provider-specific Python request validation behind `ProviderAdapter` while
+leaving generic request, message, tool, and JSON validation in the facade.
+Extract Rust client/model lifecycle into `rust/src/client.rs` and generic HTTP
+transport/deadline handling into `rust/src/transport.rs`; keep `lib.rs` focused
+on crate structure, shared validation helpers, and reexports.
+
+Exit criteria: public APIs and runtime behavior remain compatible; Python,
+TypeScript, and Rust validation gates pass; no further structural refactor is
+currently justified.

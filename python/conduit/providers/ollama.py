@@ -288,6 +288,14 @@ def _parse_ollama_stream_incremental(chunks: Iterator[bytes], request_id: Option
 class OllamaProvider:
     stream_content_types = ("application/x-ndjson", "application/ndjson", "application/json")
 
+    def validate_request(self, request, streaming):
+        max_output = request.get("max_output_tokens")
+        if max_output is not None and (not isinstance(max_output, int) or isinstance(max_output, bool) or max_output < 1):
+            _invalid("maxOutputTokens must be a positive safe integer.")
+        temp = request.get("temperature")
+        if temp is not None and (not isinstance(temp, (int, float)) or isinstance(temp, bool) or temp != temp or temp in (float("inf"), float("-inf")) or temp < 0):
+            _invalid("temperature must be finite and nonnegative.")
+
     def encode_request(self, model, messages, request, streaming):
         tools = _encode_tools(request.get("tools"))
         response_format = _encode_response_format(request.get("response_format"))

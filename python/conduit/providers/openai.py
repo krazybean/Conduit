@@ -7,6 +7,8 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 from ..errors import ConduitError, http_failure
 from ..types import GenerationResponse, ModelInfo, text_response
 
+_owned_fields = {"model", "messages", "stream", "stream_options", "max_tokens", "max_completion_tokens", "temperature", "top_p", "stop", "tools", "tool_choice", "functions", "function_call", "response_format", "n", "modalities"}
+
 
 def _invalid(msg: str) -> None:
     raise ConduitError("InvalidRequestError", msg)
@@ -353,6 +355,19 @@ def _parse_openai_stream_bytes(all_bytes: bytes, request_id: Optional[str], reda
 
 class OpenAIProvider:
     stream_content_types = ("text/event-stream",)
+
+    def validate_request(self, request, streaming):
+        max_output = request.get("max_output_tokens")
+        if max_output is not None and (not isinstance(max_output, int) or isinstance(max_output, bool) or max_output < 1):
+            _invalid("maxOutputTokens must be a positive safe integer.")
+        temp = request.get("temperature")
+        if temp is not None and (not isinstance(temp, (int, float)) or isinstance(temp, bool) or temp != temp or temp in (float("inf"), float("-inf")) or temp < 0 or temp > 2):
+            _invalid("temperature must be between 0 and 2.")
+        provider_options = request.get("provider_options")
+        if provider_options is not None and any(k in provider_options for k in _owned_fields if not (streaming and k == "stream_options")):
+            _invalid("providerOptions conflicts with a Conduit-owned field.")
+        if streaming and provider_options is not None and provider_options.get("stream_options") is not None and not isinstance(provider_options["stream_options"], dict):
+            _invalid("stream_options must be a JSON object.")
 
     def encode_request(self, model, messages, request, streaming):
         return _encode_request(model, messages, request, streaming)

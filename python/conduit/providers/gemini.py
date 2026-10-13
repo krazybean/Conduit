@@ -514,6 +514,14 @@ def _parse_gemini_stream_incremental(chunks: Iterator[bytes], request_id: Option
 class GeminiProvider:
     stream_content_types = ("text/event-stream",)
 
+    def validate_request(self, request, streaming):
+        max_output = request.get("max_output_tokens")
+        if max_output is not None and (not isinstance(max_output, int) or isinstance(max_output, bool) or max_output < 1):
+            _invalid("maxOutputTokens must be a positive safe integer.")
+        temp = request.get("temperature")
+        if temp is not None and (not isinstance(temp, (int, float)) or isinstance(temp, bool) or temp != temp or temp in (float("inf"), float("-inf")) or temp < 0):
+            _invalid("temperature must be between 0 and 2.")
+
     def encode_request(self, model, messages, request, streaming):
         return _gemini_request(messages, request, _encode_tools(request.get("tools")), _encode_tool_choice(request.get("tool_choice")), _encode_format(request.get("response_format")))
 

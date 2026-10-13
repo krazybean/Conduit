@@ -624,15 +624,6 @@ def _encode_request(model: str, request: Dict[str, Any], streaming: bool, driver
             _invalid("Tool messages must not contain text parts; use tool_result.")
         messages.append({"role": role, "content": content})
 
-    max_output = request.get("max_output_tokens")
-    if max_output is not None and (not isinstance(max_output, int) or isinstance(max_output, bool) or (driver == "anthropic" and max_output < 0) or (driver != "anthropic" and max_output < 1)):
-        _invalid("maxOutputTokens must be a nonnegative safe integer." if driver == "anthropic" else "maxOutputTokens must be a positive safe integer.")
-    temp = request.get("temperature")
-    if temp is not None:
-        if not isinstance(temp, (int, float)) or isinstance(temp, bool) or temp != temp or temp == float("inf") or temp == float("-inf") or temp < 0 or (driver == "openai-compatible" and temp > 2) or (driver == "anthropic" and temp > 1):
-            if driver == "anthropic":
-                _invalid("temperature must be between 0 and 1.")
-            _invalid("temperature must be between 0 and 2." if driver != "ollama" else "temperature must be finite and nonnegative.")
     top_p = request.get("top_p")
     if top_p is not None and (not isinstance(top_p, (int, float)) or isinstance(top_p, bool) or top_p != top_p or top_p == float("inf") or top_p == float("-inf") or top_p < 0 or top_p > 1):
         _invalid("topP must be between 0 and 1.")
@@ -643,10 +634,6 @@ def _encode_request(model: str, request: Dict[str, Any], streaming: bool, driver
     if provider_options is not None:
         if not isinstance(provider_options, dict):
             _invalid("providerOptions must be an object.")
-        if driver == "openai-compatible" and any(k in provider_options for k in _owned_fields if not (streaming and k == "stream_options")):
-            _invalid("providerOptions conflicts with a Conduit-owned field.")
-        if driver == "openai-compatible" and streaming and provider_options.get("stream_options") is not None and not isinstance(provider_options["stream_options"], dict):
-            _invalid("stream_options must be a JSON object.")
         try:
             _json_validate(provider_options)
             json.dumps(provider_options)
@@ -654,10 +641,9 @@ def _encode_request(model: str, request: Dict[str, Any], streaming: bool, driver
             raise
         except Exception:
             _invalid("providerOptions must contain plain JSON data.")
-    if driver == "anthropic" and request.get("response_format") is not None:
-        raise ConduitError("UnsupportedCapabilityError", "responseFormat is not supported for Anthropic.")
-
-    return for_driver(driver).encode_request(model, messages, request, streaming)
+    provider = for_driver(driver)
+    provider.validate_request(request, streaming)
+    return provider.encode_request(model, messages, request, streaming)
 
 
 # ---------------------------------------------------------------------------

@@ -277,6 +277,16 @@ def _sse_events(chunks: Iterator[bytes]) -> Iterator[Tuple[str, str]]:
 class AnthropicProvider:
     stream_content_types = ("text/event-stream",)
 
+    def validate_request(self, request, streaming):
+        max_output = request.get("max_output_tokens")
+        if max_output is not None and (not isinstance(max_output, int) or isinstance(max_output, bool) or max_output < 0):
+            _invalid("maxOutputTokens must be a nonnegative safe integer.")
+        temp = request.get("temperature")
+        if temp is not None and (not isinstance(temp, (int, float)) or isinstance(temp, bool) or temp != temp or temp in (float("inf"), float("-inf")) or temp < 0 or temp > 1):
+            _invalid("temperature must be between 0 and 1.")
+        if request.get("response_format") is not None:
+            raise ConduitError("UnsupportedCapabilityError", "responseFormat is not supported for Anthropic.")
+
     def encode_request(self, model, messages, request, streaming):
         return _anthropic_request(model, messages, request, streaming, _encode_tools(request.get("tools")), _encode_tool_choice(request.get("tool_choice")))
 
