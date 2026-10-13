@@ -39,7 +39,12 @@ Conduit owns transport and normalization, never application decisions. The full
 exclusion list and scope test live in [CONTRIBUTING](../CONTRIBUTING.md).
 One package per language, no provider SDKs, schema ecosystem, IDL, or codegen.
 TypeScript uses native `fetch`, Python uses stdlib HTTP/JSON, and Rust uses only
-justified HTTP/TLS and serialization dependencies.
+justified HTTP/TLS and serialization dependencies. In Python, provider wire
+behavior is implemented by adapters selected through an internal
+`ProviderAdapter`/`for_driver` registry. Rust keeps equivalent provider
+behavior in `src/providers/`; shared client, transport, timeout, and
+cancellation lifecycle remains in the crate facade. Rust crate-private tests
+live under `src/tests/` rather than inside `lib.rs`.
 
 ## Decisions still provisional
 
