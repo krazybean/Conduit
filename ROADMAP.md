@@ -75,7 +75,7 @@ Conduit
    - First determine whether an OpenAI-compatible server surface is sufficient.
    - Consider a native MLX driver only if Apple-Silicon-specific capabilities,
      performance controls, model management, or APIs provide meaningful behavior
-     that cannot be represented cleanly through the generic driver.
+     that cannot be represented cleanly through the generic OpenAI-compatible contract.
 
 ### PrismML / Bonsai
 
@@ -139,3 +139,7 @@ becomes a stable capability field.
   conditionals.
 - A dedicated driver requires a protocol boundary or meaningful capability
   difference, not branding or a different base URL.
+
+## Follow-up
+
+- [ ] Revisit the Python and Rust implementations and, where they are overly centralized in single-file modules, refactor them into clearer modular structure while preserving behavior; avoid speculative architecture.
