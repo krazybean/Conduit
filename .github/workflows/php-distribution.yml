@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,11 +13,14 @@ jobs:
   export:
     name: Export PHP package to Packagist repository
     runs-on: ubuntu-latest
+    env:
+      BOOTSTRAP: ${{ github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Check out the tagged source
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.ref }}
 
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
@@ -29,11 +33,15 @@ jobs:
         env:
           SOURCE_TAG: ${{ github.ref_name }}
         run: |
-          case "$SOURCE_TAG" in
-            v[0-9]*.[0-9]*.[0-9]*) ;;
-            *) echo "::error::Refusing non-SemVer source tag: $SOURCE_TAG"; exit 1 ;;
-          esac
-          VERSION="${SOURCE_TAG#v}"
+          if [[ "$BOOTSTRAP" != "true" ]]; then
+            case "$SOURCE_TAG" in
+              v[0-9]*.[0-9]*.[0-9]*) ;;
+              *) echo "::error::Refusing non-SemVer source tag: $SOURCE_TAG"; exit 1 ;;
+            esac
+            VERSION="${SOURCE_TAG#v}"
+          else
+            VERSION="bootstrap"
+          fi
           ./scripts/export-php.sh "$VERSION" "$RUNNER_TEMP/conduit-php-export"
           composer validate --strict --no-check-publish --working-dir "$RUNNER_TEMP/conduit-php-export"
           find "$RUNNER_TEMP/conduit-php-export" -type l -print -quit | (! grep -q .)
@@ -68,10 +76,19 @@ jobs:
           git -C "$DEST" add -A
 
           if git -C "$DEST" diff --cached --quiet; then
-            echo "Distribution content is already synchronized for $SOURCE_TAG."
+            echo "Distribution content is already synchronized."
           else
-            git -C "$DEST" commit -q -m "Export Conduit PHP $VERSION"
+            if [[ "$BOOTSTRAP" == "true" ]]; then
+              git -C "$DEST" commit -q -m "Bootstrap Conduit PHP distribution"
+            else
+              git -C "$DEST" commit -q -m "Export Conduit PHP $VERSION"
+            fi
             git -C "$DEST" push origin main
+          fi
+
+          if [[ "$BOOTSTRAP" == "true" ]]; then
+            echo "Bootstrap complete: pushed distribution main without creating a tag."
+            exit 0
           fi
 
           if git ls-remote --exit-code "$REMOTE" "refs/tags/$SOURCE_TAG" >/dev/null 2>&1; then
