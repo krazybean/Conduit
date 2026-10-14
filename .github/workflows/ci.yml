@@ -37,3 +37,25 @@ jobs:
         with:
           toolchain: stable
       - run: cargo test --manifest-path rust/Cargo.toml
+
+  php:
+    name: PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3', '8.4', '8.5']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: curl
+          coverage: none
+      - run: composer validate --no-check-publish --strict --working-dir php
+      - run: php -d zend.assertions=1 -d assert.exception=1 php/tests/smoke.php
+      - run: php -S 127.0.0.1:43127 -t php/tests php/tests/router.php >/tmp/conduit-php-http.log 2>&1 &
+      - run: php -d zend.assertions=1 -d assert.exception=1 php/tests/http_smoke.php
+      - run: php -S 127.0.0.1:43128 -t php/tests php/tests/streaming_router.php >/tmp/conduit-php-stream.log 2>&1 &
+      - run: php -d zend.assertions=1 -d assert.exception=1 php/tests/streaming.php
+      - run: php -d zend.assertions=1 -d assert.exception=1 php/tests/conformance.php

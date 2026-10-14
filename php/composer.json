@@ -1,0 +1,12 @@
+{
+  "name": "krazybean/conduit",
+  "description": "Conduit — lightweight provider-neutral AI driver",
+  "type": "library",
+  "license": "MIT",
+  "require": { "php": ">=8.2", "ext-curl": "*" },
+  "autoload": { "psr-4": { "Conduit\\": "src/" }, "files": ["src/functions.php"] },
+  "autoload-dev": { "psr-4": { "Conduit\\Tests\\": "tests/" } },
+  "support": { "issues": "https://github.com/krazybean/Conduit/issues" },
+  "minimum-stability": "stable",
+  "prefer-stable": true
+}
