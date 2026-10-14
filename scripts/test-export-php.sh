@@ -33,6 +33,6 @@ if "$ROOT/scripts/export-php.sh" 1.2 "$TMP/invalid" >/dev/null 2>&1; then
 fi
 
 workflow="$ROOT/.github/workflows/php-distribution.yml"
-grep -Fq 'ref: ${{ github.event_name == '''workflow_dispatch''' && '''main''' || github.ref }}' "$workflow"
-grep -Fq 'SOURCE_TAG: ${{ github.event_name == '''push''' && github.ref_name || '''''' }}' "$workflow"
+grep -Fq "ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.ref }}" "$workflow"
+grep -Fq "SOURCE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}" "$workflow"
 grep -Fq 'Bootstrap complete: pushed distribution main without creating a tag.' "$workflow"
