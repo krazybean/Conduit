@@ -143,3 +143,68 @@ becomes a stable capability field.
 ## Follow-up
 
 - [ ] Revisit the Python and Rust implementations and, where they are overly centralized in single-file modules, refactor them into clearer modular structure while preserving behavior; avoid speculative architecture.
+
+## Viability: discoverability and trust
+
+Conduit is already the best answer for the developer who doesn't want a
+framework. The gap is not the code — it is that its buyers haven't been
+introduced to it, and the paper trail doesn't yet prove the quality that is
+already there. This section closes the discoverability and trust gap without
+changing the product's scope.
+
+HN launch is deferred until the trust signals below are in place.
+
+### Look better on paper
+
+1. **Ship 1.0.** The single biggest trust signal. 0.2.2 says "experiment";
+   1.0 says "stable API, safe to build on." Pair it with a short API-stability
+   promise.
+2. **Publish the conformance matrix.** The existing `conformance/` work should
+   be surfaced in the README as a table: driver x capability x verified
+   against what. None of the big libraries show their receipts like this.
+3. **README rewrite, story-first.** Lead with the anti-framework pitch ("one
+   small explicit interface"), then a comparison table where Conduit wins:
+   dependencies (0 in Python), install size, API surface, no lock-in. End
+   with "Used by" — real applications running on Conduit.
+4. **Make the provider list look as big as it is.** Document
+   OpenAI-compatible as "verified compatible runtimes: vLLM, llama.cpp,
+   LM Studio, LocalAI, Jan, SGLang." No new code, honest, and the list goes
+   from 4 to 10.
+5. **Unify the three registry pages.** Same README, same keywords, each
+   linking to the other two. Add search terms people actually type:
+   "lightweight LLM client," "LangChain alternative," "LiteLLM alternative,"
+   "Ollama client."
+6. **Badges that mean something.** CI passing, conformance matrix, license.
+   Skip vanity badges. Add a CHANGELOG link so the release history is one
+   click away.
+
+### Discoverability
+
+7. **Three tutorial posts on juancastro.me**, cross-posted to dev.to: local
+   AI in 10 minutes with Ollama, tool calling without a framework,
+   structured output without the bloat. These rank on search and feed the
+   site that already exists.
+8. **Niche subreddit posts, not r/programming.** r/LocalLLaMA and
+   r/opensource "show your project" threads reach exactly the local-model
+   buyer, with a fraction of HN's scrutiny.
+9. **Awesome-list PRs.** One PR each to awesome-llm, awesome-ollama,
+   awesome-local-ai. Small effort, permanent inbound links.
+10. **GitHub topics on the repo.** `llm`, `ollama`, `openai-compatible`,
+    `lightweight`, `typescript`, `python`, `rust` — this is how GitHub
+    search finds the repo.
+11. **A starter template, not just examples.** A "chat with a local model in
+    50 lines" repo people clone and share. Templates travel further than
+    libraries.
+12. **Enable GitHub Discussions.** Lower friction than issues for "does this
+    work with X?" questions — and visible activity is its own trust signal.
+
+### Small product moves that pay for themselves
+
+13. **Embeddings.** The one real capability gap. One endpoint, unlocks every
+    RAG-adjacent user without becoming a framework. Highest-leverage code
+    item on this list. (Consistent with the existing rule: no embeddings
+    capability claim before the embedding operation exists.)
+14. **Cost tracking, later.** Usage tokens already exist; a small price table
+    or provider cost passthrough can wait until someone asks for it.
+15. **Image/audio: explicitly out of scope.** Say so in the README. A
+    deliberate "we don't do this" reads as focus, not a gap.
