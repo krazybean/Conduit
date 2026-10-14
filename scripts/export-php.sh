@@ -5,13 +5,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 if [[ $# -ne 2 ]]; then
-  echo "usage: $0 X.Y.Z OUTPUT_DIR" >&2
+  echo "usage: $0 X.Y.Z|bootstrap OUTPUT_DIR" >&2
   exit 2
 fi
 
 VERSION=$1
 OUTPUT=$2
-if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+if [[ "$VERSION" != "bootstrap" && ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "invalid version: $VERSION" >&2
   exit 2
 fi
