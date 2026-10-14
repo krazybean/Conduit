@@ -53,6 +53,8 @@ jobs:
           extensions: curl
           coverage: none
       - run: composer validate --no-check-publish --strict --working-dir php
+      - if: matrix.php == '8.2'
+        run: bash scripts/test-export-php.sh
       - run: php -d zend.assertions=1 -d assert.exception=1 php/tests/smoke.php
       - run: php -S 127.0.0.1:43127 -t php/tests php/tests/router.php >/tmp/conduit-php-http.log 2>&1 &
       - run: php -d zend.assertions=1 -d assert.exception=1 php/tests/http_smoke.php
