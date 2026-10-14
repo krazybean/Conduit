@@ -96,13 +96,13 @@ final class Client
         if (!function_exists('curl_init')) throw new ConduitError('ConnectionError', 'PHP ext-curl is required for streaming.');
         $timeout = $req['timeout'] ?? $this->timeout; $deadline = $timeout === null ? null : microtime(true) + $timeout / 1000;
         $signal = $req['signal'] ?? null; $multi = curl_multi_init(); $handle = curl_init($this->url($model, true));
-        $events = []; $error = null; $status = 0; $responseHeaders = []; $errorBody = ''; $parser = ['buffer'=>'','event'=>null,'data'=>[],'dataBytes'=>0,'done'=>false];
+        $events = []; $deferredUsage = []; $error = null; $status = 0; $responseHeaders = []; $errorBody = ''; $parser = ['buffer'=>'','event'=>null,'data'=>[],'dataBytes'=>0,'done'=>false];
         $semantic = ['started'=>false,'id'=>null,'model'=>null,'finish'=>null,'finishRaw'=>null,'text'=>'','sawText'=>false,'content'=>[],'usage'=>null,'tools'=>[],'done'=>false,'metadata'=>[],'initialUsageEmitted'=>false];
-        $addUsage = function (?array $raw, array $map) use (&$events, &$semantic, &$error): void {
+        $addUsage = function (?array $raw, array $map) use (&$events, &$deferredUsage, &$semantic, &$error): void {
             if ($raw === null) return;
             $next = $semantic['usage'] ?? [];
             foreach ($map as $from=>$to) if (array_key_exists($from,$raw)) { if (!is_int($raw[$from]) || $raw[$from] < 0) { $error = new ConduitError('ProtocolError','Malformed provider usage.'); return; } $next[$to] = $raw[$from]; }
-            if ($next) { $semantic['usage'] = $next; $events[] = ['type'=>'usage','usage'=>$next]; }
+            if ($next) { $semantic['usage'] = $next; $event = ['type'=>'usage','usage'=>$next]; if ($this->driver === 'gemini') $deferredUsage[] = $event; else $events[] = $event; }
         };
         $push = function (string $payload, ?string $eventName = null) use (&$events, &$error, &$semantic, &$responseHeaders, $addUsage): void {
             if ($payload === '[DONE]') {
@@ -172,7 +172,7 @@ final class Client
             if ($this->driver === 'ollama' && $parser['buffer'] !== '') { $push($parser['buffer']); $parser['buffer'] = ''; }
             if ($parser['buffer'] !== '' || $parser['data']) throw new ConduitError('ProtocolError', 'Malformed or incomplete provider stream.');
             if ($this->driver === 'anthropic' && !$semantic['done'] && $semantic['finish'] !== null) { if (isset($responseHeaders['request-id'])) $semantic['metadata']['requestId'] = $this->redact($responseHeaders['request-id']); $finalContent = $semantic['text'] === '' ? [] : [['type'=>'text','text'=>$semantic['text']]]; foreach ($semantic['content'] as $part) if (($part['type'] ?? null) === 'tool_call') $finalContent[] = $part; $events[]=['type'=>'done','response'=>new GenerationResponse($semantic['id'],$semantic['model'],$finalContent,$semantic['finish'],$semantic['usage'],$semantic['metadata'])]; $semantic['done']=true; }
-            if ($this->driver === 'gemini' && !$semantic['done'] && $semantic['finish'] !== null) { if (isset($responseHeaders['x-request-id'])) $semantic['metadata']['requestId'] = $this->redact($responseHeaders['x-request-id']); $finalContent = $semantic['text'] === '' ? [] : [['type'=>'text','text'=>$semantic['text']]]; foreach ($semantic['content'] as $part) if (($part['type'] ?? null) === 'tool_call') $finalContent[] = $part; $events[]=['type'=>'done','response'=>new GenerationResponse($semantic['id'],$semantic['model'],$finalContent,$semantic['finish'],$semantic['usage'],$semantic['metadata'])]; $semantic['done']=true; }
+            if ($this->driver === 'gemini' && !$semantic['done'] && $semantic['finish'] !== null) { if (isset($responseHeaders['x-request-id'])) $semantic['metadata']['requestId'] = $this->redact($responseHeaders['x-request-id']); foreach ($deferredUsage as $event) $events[] = $event; $finalContent = $semantic['text'] === '' ? [] : [['type'=>'text','text'=>$semantic['text']]]; foreach ($semantic['content'] as $part) if (($part['type'] ?? null) === 'tool_call') $finalContent[] = $part; $events[]=['type'=>'done','response'=>new GenerationResponse($semantic['id'],$semantic['model'],$finalContent,$semantic['finish'],$semantic['usage'],$semantic['metadata'])]; $semantic['done']=true; }
             if (!$semantic['done']) throw new ConduitError('ProtocolError', 'Malformed or incomplete provider stream.');
             while ($events) yield array_shift($events);
         } finally { curl_multi_remove_handle($multi, $handle); curl_multi_close($multi); }
