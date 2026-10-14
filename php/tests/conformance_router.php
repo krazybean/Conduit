@@ -4,6 +4,12 @@ declare(strict_types=1);
 $case = json_decode(file_get_contents((string) getenv('CONDUIT_CASE_FILE')), true, 512, JSON_THROW_ON_ERROR);
 $wire = $case['input']['wire'] ?? $case['input']['response']['wire'] ?? [];
 $requestCase = !isset($wire['status']);
+$pageToken = $_GET['pageToken'] ?? null;
+if (($case['driver'] ?? null) === 'gemini' && ($case['operation'] ?? null) === 'list_models' && $pageToken === 'token-123') {
+    $wire['body'] = [
+        'models' => [['name' => 'models/gemini-1.5-pro', 'displayName' => 'Pro']],
+    ];
+}
 $wire += ['status'=>200, 'headers'=>[]];
 $body = file_get_contents('php://input');
 if (getenv('CONDUIT_REQUEST_FILE')) file_put_contents((string) getenv('CONDUIT_REQUEST_FILE'), json_encode(['method'=>$_SERVER['REQUEST_METHOD'],'path'=>$_SERVER['REQUEST_URI'],'body'=>json_decode($body, true)], JSON_THROW_ON_ERROR));
