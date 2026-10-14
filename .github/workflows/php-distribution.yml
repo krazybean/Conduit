@@ -1,0 +1,87 @@
+name: Publish PHP distribution
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    name: Export PHP package to Packagist repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          tools: composer
+          coverage: none
+
+      - name: Export and validate PHP package
+        env:
+          SOURCE_TAG: ${{ github.ref_name }}
+        run: |
+          case "$SOURCE_TAG" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::Refusing non-SemVer source tag: $SOURCE_TAG"; exit 1 ;;
+          esac
+          VERSION="${SOURCE_TAG#v}"
+          ./scripts/export-php.sh "$VERSION" "$RUNNER_TEMP/conduit-php-export"
+          composer validate --strict --no-check-publish --working-dir "$RUNNER_TEMP/conduit-php-export"
+          find "$RUNNER_TEMP/conduit-php-export" -type l -print -quit | (! grep -q .)
+
+      - name: Publish synchronized distribution commit and tag
+        env:
+          DIST_TOKEN: ${{ secrets.CONDUIT_PHP_DISTRIBUTION_TOKEN }}
+          DIST_REPO: krazybean/krazybean-conduit-php
+          SOURCE_TAG: ${{ github.ref_name }}
+        run: |
+          if [[ -z "$DIST_TOKEN" ]]; then
+            echo "::error::CONDUIT_PHP_DISTRIBUTION_TOKEN is not configured. Create a narrowly scoped GitHub App or fine-grained token with Contents: Read and write on $DIST_REPO, then add it as an Actions secret."
+            exit 1
+          fi
+
+          VERSION="${SOURCE_TAG#v}"
+          REMOTE="https://x-access-token:${DIST_TOKEN}@github.com/${DIST_REPO}.git"
+          DEST="${RUNNER_TEMP}/conduit-php-repository"
+
+          if git ls-remote --exit-code "$REMOTE" "refs/heads/main" >/dev/null 2>&1; then
+            git clone --quiet --branch main "$REMOTE" "$DEST"
+          else
+            mkdir -p "$DEST"
+            git -C "$DEST" init -q -b main
+            git -C "$DEST" remote add origin "$REMOTE"
+          fi
+
+          find "$DEST" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -R "$RUNNER_TEMP/conduit-php-export"/. "$DEST"/
+          git -C "$DEST" config user.name "github-actions[bot]"
+          git -C "$DEST" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$DEST" add -A
+
+          if git -C "$DEST" diff --cached --quiet; then
+            echo "Distribution content is already synchronized for $SOURCE_TAG."
+          else
+            git -C "$DEST" commit -q -m "Export Conduit PHP $VERSION"
+            git -C "$DEST" push origin main
+          fi
+
+          if git ls-remote --exit-code "$REMOTE" "refs/tags/$SOURCE_TAG" >/dev/null 2>&1; then
+            git -C "$DEST" fetch --quiet origin "refs/tags/$SOURCE_TAG:refs/tags/$SOURCE_TAG"
+            if [[ "$(git -C "$DEST" rev-list -n 1 "$SOURCE_TAG")" != "$(git -C "$DEST" rev-parse HEAD)" ]]; then
+              echo "::error::Destination tag $SOURCE_TAG already exists but does not identify the synchronized main commit."
+              exit 1
+            fi
+            echo "Destination tag $SOURCE_TAG is already synchronized."
+          else
+            git -C "$DEST" tag -a "$SOURCE_TAG" -m "Conduit PHP $VERSION"
+            git -C "$DEST" push origin "refs/tags/$SOURCE_TAG"
+          fi
