@@ -4,6 +4,12 @@ Conduit stays a lightweight model-access layer: infrastructure, not a framework.
 Roadmap work should strengthen protocol coverage and normalization without adding
 application orchestration or a provider integration for every runtime brand.
 
+The next cross-language foundation is recorded in
+[`spec/foundation.md`](spec/foundation.md): protocol adapters remain the
+behavioral boundary, provider presets stay local convenience metadata, and
+provider-reported usage remains distinct from optional caller-side aggregation
+and best-effort cost estimates.
+
 ## Durable local and self-hosted inference
 
 **Architectural principle: Conduit should normalize protocols/interfaces rather
@@ -142,6 +148,13 @@ becomes a stable capability field.
 
 ## Follow-up
 
+- [ ] Add shared cross-language provider-resolution conformance fixtures and
+  runners before release: compare provider-to-driver/protocol and default
+  endpoint resolution, explicit endpoint overrides, conflicting driver
+  rejection, authentication configuration/header semantics, and consistent
+  malformed or unknown provider errors across TypeScript, Python, and Rust.
+  Keep credentials synthetic and endpoints local; a manifest copy check alone
+  is not sufficient evidence of behavioral parity.
 - [ ] Revisit the Python and Rust implementations and, where they are overly centralized in single-file modules, refactor them into clearer modular structure while preserving behavior; avoid speculative architecture.
 
 ## Viability: discoverability and trust

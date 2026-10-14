@@ -19,6 +19,7 @@ fn gemini_generate_real_http() {
     });
     let cfg = ClientConfig {
         driver: "gemini".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: Some("k".to_string()),
         headers: None,
@@ -73,6 +74,7 @@ fn gemini_stream_first_event_before_eof() {
     });
     let cfg = ClientConfig {
         driver: "gemini".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: Some("k".to_string()),
         headers: None,
@@ -142,6 +144,7 @@ fn gemini_stream_fragmentation() {
     });
     let cfg = ClientConfig {
         driver: "gemini".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: Some("k".to_string()),
         headers: None,
@@ -199,6 +202,7 @@ fn gemini_stream_timeout_is_operation_wide() {
     });
     let cfg = ClientConfig {
         driver: "gemini".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: Some("k".to_string()),
         headers: None,
@@ -261,6 +265,7 @@ fn gemini_stream_drop_releases_connection() {
     });
     let cfg = ClientConfig {
         driver: "gemini".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: Some("k".to_string()),
         headers: None,
@@ -311,6 +316,7 @@ fn gemini_pre_cancelled_zero_request() {
     let signal = std::sync::Arc::new(AtomicBool::new(true));
     let cfg = ClientConfig {
         driver: "gemini".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: Some("k".to_string()),
         headers: None,
@@ -361,6 +367,7 @@ fn gemini_tool_id_preserved() {
     });
     let cfg = ClientConfig {
         driver: "gemini".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: Some("k".to_string()),
         headers: None,
@@ -397,6 +404,7 @@ fn gemini_tool_id_preserved() {
 fn gemini_system_leading_validation() {
     let cfg = ClientConfig {
         driver: "gemini".to_string(),
+        provider: None,
         endpoint: "http://127.0.0.1:9".to_string(),
         credentials: Some("k".to_string()),
         headers: None,
@@ -580,6 +588,7 @@ fn gemini_pagination_complete() {
     });
     let cfg = ClientConfig {
         driver: "gemini".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: None,
         headers: None,

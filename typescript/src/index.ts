@@ -5,11 +5,14 @@ import { openaiStream } from "./openai-stream.js";
 import { anthropicRequest, anthropicResponse, anthropicError, anthropicStream } from "./anthropic.js";
 import { geminiRequest, encodeGeminiTools, encodeGeminiToolChoice, encodeGeminiFormat, geminiResponse, geminiError, geminiStream } from "./gemini.js";
 import { ConduitError } from "./errors.js";
-import type { Client, ClientConfig, GenerationRequest, GenerationResponse, JsonValue, ListModelsOptions, Model, ModelInfo, StreamEvent } from "./types.js";
+import { providerPresets } from "./providers.js";
+import type { Client, ClientConfig, Driver, GenerationRequest, GenerationResponse, JsonValue, ListModelsOptions, Model, ModelInfo, StreamEvent } from "./types.js";
 
 export { ConduitError } from "./errors.js";
 export type { ErrorCode, ErrorDetails } from "./errors.js";
-export type { Client, ClientConfig, ContentPart, GenerationRequest, GenerationResponse, JsonValue, ListModelsOptions, Message, Model, ModelInfo, ResponseFormat, StreamEvent, TextPart, ToolCallPart, ToolChoice, ToolDefinition, ToolResultPart, Usage } from "./types.js";
+export { providerManifest, providerPresets, preset } from "./providers.js";
+export type { ProviderPreset, ProviderPresetDefinition } from "./providers.js";
+export type { Client, ClientConfig, ContentPart, Driver, GenerationRequest, GenerationResponse, JsonValue, ListModelsOptions, Message, Model, ModelInfo, ResponseFormat, StreamEvent, TextPart, ToolCallPart, ToolChoice, ToolDefinition, ToolResultPart, Usage } from "./types.js";
 
 const ownedFields = new Set([
   "model", "messages", "stream", "stream_options", "max_tokens", "max_completion_tokens",
@@ -112,7 +115,7 @@ function encodeTools(tools: readonly import("./types.js").ToolDefinition[] | und
   }));
 }
 
-function encodeToolChoice(choice: unknown, driver?: ClientConfig["driver"]): unknown {
+function encodeToolChoice(choice: unknown, driver?: Driver): unknown {
   if (choice === undefined) return undefined;
   if (driver === "anthropic") {
     if (choice === "auto") return { type: "auto" };
@@ -155,7 +158,7 @@ function validateResponseFormat(value: unknown): void {
   try { json(value.schema); } catch { invalid("responseFormat.schema must be JSON-compatible."); }
 }
 
-function encodeResponseFormat(value: unknown, driver: ClientConfig["driver"]): unknown {
+function encodeResponseFormat(value: unknown, driver: Driver): unknown {
   if (value === undefined) return undefined;
   const fmt = value as Record<string, unknown>;
   if (fmt.type === "text") {
@@ -183,7 +186,7 @@ function normalizeRequest(req: GenerationRequest | string): GenerationRequest {
   if (typeof req === "string") return { messages: [{ role: "user", content: req }] } as GenerationRequest;
   return req;
 }
-function encode(model: string, request: GenerationRequest | string, streaming: boolean, driver: ClientConfig["driver"]): string {
+function encode(model: string, request: GenerationRequest | string, streaming: boolean, driver: Driver): string {
   const normalized = normalizeRequest(request as GenerationRequest | string);
   if (!object(normalized)) invalid("A generation request is required.");
   if (Object.keys(normalized).some(key => unsupportedFields.has(key))) {
@@ -335,19 +338,24 @@ export function connect(config: ClientConfig & { model: string }): Model;
 export function connect(config: ClientConfig): Client;
 export function connect(config: ClientConfig & { model?: string }): Client | Model {
   if (!object(config)) invalid("Client configuration is required.");
-  keys(config, new Set(["driver", "endpoint", "credentials", "headers", "timeout", "model"]));
-  if (config.driver !== "openai-compatible" && config.driver !== "ollama" && config.driver !== "anthropic" && config.driver !== "gemini") invalid("Unknown driver.");
-  const driver = config.driver;
+  const options = config as ClientConfig & { model?: string };
+  keys(options, new Set(["driver", "provider", "endpoint", "credentials", "headers", "timeout", "model"]));
+  if (options.driver !== undefined && options.driver !== "openai-compatible" && options.driver !== "ollama" && options.driver !== "anthropic" && options.driver !== "gemini") invalid("Unknown driver.");
+  const providerName = options.provider as string | undefined;
+  if (providerName !== undefined && !Object.hasOwn(providerPresets, providerName)) invalid("Unknown provider preset.");
+  const selected = providerName === undefined ? undefined : providerPresets[providerName as keyof typeof providerPresets];
+  if (options.driver !== undefined && selected !== undefined && options.driver !== selected.driver) invalid("provider and driver must describe the same protocol.");
+  const driver = options.driver ?? selected?.driver;
+  if (driver === undefined) invalid("driver or provider is required.");
   const defaults: Record<string, string> = { ollama: "http://localhost:11434", anthropic: "https://api.anthropic.com", gemini: "https://generativelanguage.googleapis.com" };
   const rawEndpoint = (config as Record<string, unknown>).endpoint as string | undefined;
   if (rawEndpoint === undefined) {
-    if (driver === "openai-compatible") invalid("endpoint must be an HTTP(S) API base URL.");
-    (config as Record<string, unknown>).endpoint = defaults[driver];
+    (config as Record<string, unknown>).endpoint = selected?.endpoint ?? defaults[driver];
   }
-  if (typeof config.endpoint !== "string") invalid("endpoint must be an HTTP(S) API base URL.");
+  if (typeof options.endpoint !== "string") invalid("endpoint must be an HTTP(S) API base URL.");
   let endpoint: URL;
-  try { endpoint = new URL(config.endpoint); } catch { invalid("endpoint must be an HTTP(S) API base URL."); }
-  if (!["http:", "https:"].includes(endpoint.protocol) || endpoint.username || endpoint.password || endpoint.search || endpoint.hash || config.endpoint.includes("?") || config.endpoint.includes("#")) {
+  try { endpoint = new URL(options.endpoint); } catch { invalid("endpoint must be an HTTP(S) API base URL."); }
+  if (!["http:", "https:"].includes(endpoint.protocol) || endpoint.username || endpoint.password || endpoint.search || endpoint.hash || options.endpoint.includes("?") || options.endpoint.includes("#")) {
     invalid("endpoint must be an HTTP(S) API base URL without userinfo, query, or fragment.");
   }
   const basePath = endpoint.pathname.replace(/\/+$/, "");
@@ -363,17 +371,17 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
     url = endpoint.href;
     listUrl = `${endpoint.protocol}//${endpoint.host}${basePath}${driver === "ollama" ? "/api/tags" : driver === "anthropic" ? "/v1/models" : "/models"}`;
   }
-  const credentials = config.credentials;
+  const credentials = options.credentials;
   if (credentials !== undefined && (typeof credentials !== "string" || !/^[A-Za-z0-9._~+\/-]+=*$/.test(credentials))) invalid("credentials must be a nonempty bearer token.");
-  timeoutValue(config.timeout);
-  const defaultTimeout = config.timeout;
+  timeoutValue(options.timeout);
+  const defaultTimeout = options.timeout;
   const headers = new Headers({ "content-type": "application/json" });
   const secrets: string[] = credentials ? [credentials] : [];
-  if (config.headers !== undefined) {
-    if (!object(config.headers)) invalid("headers must be a string-valued object.");
-    for (const key of Reflect.ownKeys(config.headers)) {
+  if (options.headers !== undefined) {
+    if (!object(options.headers)) invalid("headers must be a string-valued object.");
+    for (const key of Reflect.ownKeys(options.headers)) {
       if (typeof key !== "string" || protectedHeaders.has(key.toLowerCase())) invalid("Custom header conflicts with a protected header.");
-      const value = config.headers[key];
+      const value = options.headers[key];
       if (typeof value !== "string") invalid("Custom header values must be strings.");
       try { headers.set(key, value); } catch { invalid("Invalid custom HTTP header."); }
       if (value) secrets.push(value);
@@ -617,7 +625,7 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
   }
   async function* operation(id: string, request: GenerationRequest | string, streaming: boolean): AsyncGenerator<StreamEvent> {
     const normalized = normalizeRequest(request);
-    const body = encode(id, normalized, streaming, driver);
+    const body = encode(id, normalized, streaming, driver as Driver);
     const timeout = normalized.timeout ?? defaultTimeout;
     timeoutValue(normalized.timeout);
     const signal = normalized.signal;
@@ -703,5 +711,5 @@ export function connect(config: ClientConfig & { model?: string }): Client | Mod
       });
     },
   });
-  return config.model === undefined ? client : client.model(config.model);
+  return options.model === undefined ? client : client.model(options.model);
 }

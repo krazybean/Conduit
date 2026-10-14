@@ -22,6 +22,7 @@ fn anthropic_generate_real_http() {
     });
     let cfg = ClientConfig {
         driver: "anthropic".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: Some("key".to_string()),
         headers: None,
@@ -58,6 +59,7 @@ fn anthropic_generate_real_http() {
 fn anthropic_generate_requires_max_tokens() {
     let cfg = ClientConfig {
         driver: "anthropic".to_string(),
+        provider: None,
         endpoint: "http://127.0.0.1:9".to_string(),
         credentials: Some("key".to_string()),
         headers: None,
@@ -94,6 +96,7 @@ fn anthropic_generate_requires_max_tokens() {
 fn anthropic_generate_system_leading() {
     let cfg = ClientConfig {
         driver: "anthropic".to_string(),
+        provider: None,
         endpoint: "http://127.0.0.1:9".to_string(),
         credentials: Some("key".to_string()),
         headers: None,
@@ -159,6 +162,7 @@ fn anthropic_stream_first_event_before_eof() {
     });
     let cfg = ClientConfig {
         driver: "anthropic".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: Some("key".to_string()),
         headers: None,
@@ -225,6 +229,7 @@ fn anthropic_stream_fragmentation() {
     });
     let cfg = ClientConfig {
         driver: "anthropic".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: Some("key".to_string()),
         headers: None,
@@ -280,6 +285,7 @@ fn anthropic_stream_timeout_is_operation_wide() {
     });
     let cfg = ClientConfig {
         driver: "anthropic".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: Some("key".to_string()),
         headers: None,
@@ -343,6 +349,7 @@ fn anthropic_stream_drop_releases_connection() {
     });
     let cfg = ClientConfig {
         driver: "anthropic".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: Some("key".to_string()),
         headers: None,
@@ -394,6 +401,7 @@ fn anthropic_pre_cancelled_zero_request() {
     let signal = std::sync::Arc::new(AtomicBool::new(true));
     let cfg = ClientConfig {
         driver: "anthropic".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: Some("key".to_string()),
         headers: None,
@@ -447,6 +455,7 @@ fn anthropic_tool_use_roundtrip() {
     });
     let cfg = ClientConfig {
         driver: "anthropic".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: Some("key".to_string()),
         headers: None,
@@ -488,6 +497,7 @@ fn anthropic_tool_use_roundtrip() {
 fn anthropic_requires_max_output_tokens_before_io() {
     let cfg = ClientConfig {
         driver: "anthropic".to_string(),
+        provider: None,
         endpoint: "http://127.0.0.1:9".to_string(),
         credentials: None,
         headers: None,
@@ -578,6 +588,7 @@ fn anthropic_stream_first_event_before_eof_dup() {
     });
     let cfg = ClientConfig {
         driver: "anthropic".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: None,
         headers: None,
@@ -644,6 +655,7 @@ fn anthropic_stream_tool_json_delta() {
     });
     let cfg = ClientConfig {
         driver: "anthropic".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: None,
         headers: None,
@@ -745,6 +757,7 @@ fn anthropic_pagination_complete() {
     });
     let cfg = ClientConfig {
         driver: "anthropic".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: None,
         headers: None,

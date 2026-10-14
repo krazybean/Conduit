@@ -26,6 +26,7 @@ impl Driver {
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
     pub driver: String,
+    pub provider: Option<String>,
     pub endpoint: String,
     pub credentials: Option<String>,
     pub headers: Option<HashMap<String, String>>,
@@ -37,6 +38,7 @@ impl Default for ClientConfig {
     fn default() -> Self {
         Self {
             driver: String::new(),
+            provider: None,
             endpoint: String::new(),
             credentials: None,
             headers: None,

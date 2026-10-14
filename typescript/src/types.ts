@@ -1,6 +1,10 @@
+export type Driver = "openai-compatible" | "ollama" | "anthropic" | "gemini";
+
 export interface ClientConfig {
-  driver: "openai-compatible" | "ollama" | "anthropic" | "gemini";
-  /** API base; required for openai-compatible, defaults for ollama/anthropic/gemini. */
+  driver?: Driver;
+  /** Convenience preset. Explicit driver remains the lower-level escape hatch. */
+  provider?: import("./providers.js").ProviderPreset;
+  /** API base; overrides a preset endpoint when supplied. */
   endpoint?: string;
   credentials?: string;
   headers?: Record<string, string>;

@@ -46,6 +46,7 @@ fn openai_generate_real_http() {
     });
     let cfg = ClientConfig {
         driver: "openai-compatible".to_string(),
+        provider: None,
         endpoint: format!("http://{}/v1", addr),
         credentials: None,
         headers: None,
@@ -106,6 +107,7 @@ fn openai_http_error_body_is_normalized_and_redacted() {
     });
     let cfg = ClientConfig {
         driver: "openai-compatible".to_string(),
+        provider: None,
         endpoint: format!("http://{addr}"),
         credentials: Some(secret.to_string()),
         headers: None,
@@ -168,6 +170,7 @@ fn openai_redirect_does_not_forward_credentials() {
     });
     let cfg = ClientConfig {
         driver: "openai-compatible".to_string(),
+        provider: None,
         endpoint: format!("http://{redirect_addr}/v1"),
         credentials: Some("redirect-secret".to_string()),
         headers: None,
@@ -212,6 +215,7 @@ fn openai_generate_empty_vs_tool_only() {
         });
         let cfg = ClientConfig {
             driver: "openai-compatible".to_string(),
+            provider: None,
             endpoint: format!("http://{}", addr),
             credentials: None,
             headers: None,
@@ -272,6 +276,7 @@ fn openai_tool_id_not_fabricated() {
     });
     let cfg = ClientConfig {
         driver: "openai-compatible".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: None,
         headers: None,
@@ -323,6 +328,7 @@ fn openai_tool_id_not_fabricated() {
     });
     let cfg2 = ClientConfig {
         driver: "openai-compatible".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr2),
         credentials: None,
         headers: None,
@@ -447,6 +453,7 @@ fn openai_stream_first_event_before_eof() {
     });
     let cfg = ClientConfig {
         driver: "openai-compatible".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: None,
         headers: None,
@@ -518,6 +525,7 @@ fn openai_stream_fragmentation() {
     });
     let cfg = ClientConfig {
         driver: "openai-compatible".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: None,
         headers: None,
@@ -572,6 +580,7 @@ fn openai_stream_timeout_is_operation_wide() {
     });
     let cfg = ClientConfig {
         driver: "openai-compatible".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: None,
         headers: None,
@@ -639,6 +648,7 @@ fn openai_stream_drop_releases_connection() {
     });
     let cfg = ClientConfig {
         driver: "openai-compatible".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: None,
         headers: None,
@@ -691,6 +701,7 @@ fn openai_pre_cancelled_zero_request() {
     let signal = std::sync::Arc::new(AtomicBool::new(true));
     let cfg = ClientConfig {
         driver: "openai-compatible".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: None,
         headers: None,
@@ -729,6 +740,7 @@ fn openai_pre_cancelled_zero_request() {
 fn test_openai_still_requires_endpoint() {
     let cfg = ClientConfig {
         driver: "openai-compatible".into(),
+        provider: None,
         endpoint: "".into(),
         model: Some("m".into()),
         ..Default::default()

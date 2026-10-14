@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import { describe, it } from "node:test";
-import { connect } from "../dist/index.js";
+import { connect, providerManifest, providerPresets } from "../dist/index.js";
+import { readFile } from "node:fs/promises";
 
 function server(handler) {
   const s = http.createServer(handler);
@@ -41,6 +42,21 @@ describe("ergonomics", () => {
 
   it("openai-compatible still requires endpoint", () => {
     assert.throws(() => connect({ driver: "openai-compatible", model: "x" }), /endpoint/);
+  });
+
+  it("provider presets select a protocol and allow endpoint overrides", () => {
+    assert.equal(providerPresets.muse.driver, "openai-compatible");
+    assert.doesNotThrow(() => connect({ provider: "muse", credentials: "token", model: "muse-wonder-1.0" }));
+    assert.doesNotThrow(() => connect({ provider: "groq", endpoint: "http://127.0.0.1:1/v1", model: "test" }));
+    assert.throws(() => connect({ provider: "muse", driver: "ollama", model: "test" }), /same protocol/);
+  });
+
+  it("matches the canonical provider manifest and exposes every required capability", async () => {
+    const canonical = JSON.parse(await readFile(new URL("../../conformance/providers.json", import.meta.url), "utf8"));
+    assert.deepEqual(providerManifest, canonical);
+    assert.deepEqual(Object.keys(providerPresets), Object.keys(canonical.providers));
+    assert.ok(canonical.languages.includes("typescript"));
+    assert.deepEqual(canonical.capabilities, ["provider_preset", "endpoint_override"]);
   });
 
   it("stream string shorthand", async () => {

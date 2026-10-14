@@ -23,6 +23,7 @@ fn ollama_generate_real_http() {
     });
     let cfg = ClientConfig {
         driver: "ollama".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: None,
         headers: None,
@@ -76,6 +77,7 @@ fn ollama_stream_first_event_before_eof() {
     });
     let cfg = ClientConfig {
         driver: "ollama".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: None,
         headers: None,
@@ -137,6 +139,7 @@ fn ollama_stream_fragmentation() {
     });
     let cfg = ClientConfig {
         driver: "ollama".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: None,
         headers: None,
@@ -199,6 +202,7 @@ fn ollama_stream_timeout_is_operation_wide() {
     });
     let cfg = ClientConfig {
         driver: "ollama".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: None,
         headers: None,
@@ -261,6 +265,7 @@ fn ollama_stream_drop_releases_connection() {
     });
     let cfg = ClientConfig {
         driver: "ollama".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: None,
         headers: None,
@@ -312,6 +317,7 @@ fn ollama_pre_cancelled_zero_request() {
     let signal = std::sync::Arc::new(AtomicBool::new(true));
     let cfg = ClientConfig {
         driver: "ollama".to_string(),
+        provider: None,
         endpoint: format!("http://{}", addr),
         credentials: None,
         headers: None,

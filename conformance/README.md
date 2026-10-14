@@ -52,7 +52,13 @@ Implemented files: `requests/openai-text.json` (one request),
 `responses/openai-text.json` (ten responses), and `errors/openai-http.json`
 (thirteen HTTP errors). These synthetic wire examples are regression contracts,
 not claims of certification against any live provider. Run all 24 cases with
-`npm test --prefix typescript`. Capabilities remain placeholders.
+`npm test --prefix typescript`.
+
+`providers.json` is the canonical bundled provider manifest. Each runtime must
+bundle the same manifest and pass its `provider_preset` and `endpoint_override`
+capability gates. Its provider entries are convenience presets only and remain
+`unverified` until live conformance evidence exists; PHP is not listed or
+supported until its implementation and gate pass.
 
 Listing: `models/ollama-tags.json` (8 cases: single/multiple/metadata/empty/malformed) and `models/openai-models.json` (9 cases: single/multiple/sparse/empty/malformed). Coverage includes provider metadata, defensive sparse objects, and ProtocolError for malformed successful payloads.
 
