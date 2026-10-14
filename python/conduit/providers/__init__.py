@@ -1,4 +1,7 @@
-"""Provider adapters for provider-specific wire behavior."""
+"""Provider adapters and the bundled provider preset manifest."""
+
+import json
+from pathlib import Path
 
 from typing import Any, Dict, Iterator, List, Optional, Protocol, Tuple
 
@@ -7,6 +10,17 @@ from .anthropic import AnthropicProvider
 from .gemini import GeminiProvider
 from .ollama import OllamaProvider
 from .openai import OpenAIProvider
+
+with (Path(__file__).resolve().parent.parent / "providers.json").open(encoding="utf-8") as _manifest_file:
+    provider_manifest = json.load(_manifest_file)
+provider_presets = provider_manifest["providers"]
+
+
+def preset(name: str) -> Dict[str, str]:
+    try:
+        return provider_presets[name]
+    except KeyError:
+        raise ValueError(f"Unknown provider preset: {name}") from None
 
 
 class ProviderAdapter(Protocol):

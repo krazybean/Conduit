@@ -69,6 +69,7 @@ fn test_validate_tool_choice() {
 fn test_connect_and_model() {
     let cfg = ClientConfig {
         driver: "openai-compatible".to_string(),
+        provider: None,
         endpoint: "https://api.openai.com/v1".to_string(),
         credentials: Some("sk-123".to_string()),
         headers: None,
@@ -79,6 +80,46 @@ fn test_connect_and_model() {
     let m = client.model("gpt-4").unwrap();
     assert_eq!(m.model_id, "gpt-4");
     assert!(client.model("").is_err());
+}
+
+#[test]
+fn test_provider_manifest_parity_and_endpoint_override() {
+    let bundled: serde_json::Value =
+        serde_json::from_str(include_str!("../../providers.json")).unwrap();
+    let canonical: serde_json::Value =
+        serde_json::from_str(include_str!("../../../conformance/providers.json")).unwrap();
+    assert_eq!(bundled, canonical);
+    assert!(bundled["languages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|v| v == "rust"));
+    assert_eq!(
+        bundled["capabilities"],
+        serde_json::json!(["provider_preset", "endpoint_override"])
+    );
+
+    let client = connect(ClientConfig {
+        driver: String::new(),
+        provider: Some("muse".to_string()),
+        endpoint: String::new(),
+        credentials: None,
+        headers: None,
+        timeout: None,
+        model: None,
+    })
+    .unwrap();
+    assert!(matches!(client.driver, Driver::OpenAICompatible));
+    assert_eq!(client.endpoint, "https://api.meta.ai/v1");
+
+    let override_client = connect(ClientConfig {
+        driver: String::new(),
+        provider: Some("groq".to_string()),
+        endpoint: "http://127.0.0.1:1/v1".to_string(),
+        ..Default::default()
+    })
+    .unwrap();
+    assert_eq!(override_client.endpoint, "http://127.0.0.1:1/v1");
 }
 
 #[test]
@@ -258,6 +299,7 @@ fn test_cancellation_first_wins() {
     };
     let cfg = ClientConfig {
         driver: "openai-compatible".to_string(),
+        provider: None,
         endpoint: "https://api.openai.com/v1".to_string(),
         credentials: None,
         headers: None,
@@ -295,6 +337,7 @@ fn test_whole_operation_timeout_validation() {
     };
     let cfg = ClientConfig {
         driver: "openai-compatible".to_string(),
+        provider: None,
         endpoint: "https://api.openai.com/v1".to_string(),
         credentials: None,
         headers: None,
@@ -341,6 +384,7 @@ fn test_ollama_default_endpoint() {
     assert!(client.list_models(None).is_err() || true); // just check we can create client without endpoint
     let cfg2 = ClientConfig {
         driver: "ollama".into(),
+        provider: None,
         endpoint: "http://example.com:11434".into(),
         ..Default::default()
     };
@@ -387,6 +431,7 @@ fn test_ollama_connect_shorthand() {
     // we can't check without endpoint, but we can check that connect with model works
     let cfg = ClientConfig {
         driver: "ollama".into(),
+        provider: None,
         endpoint: "".into(),
         model: Some("qwen3:8b".into()),
         ..Default::default()

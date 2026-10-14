@@ -64,6 +64,27 @@ pub struct Model {
 
 #[allow(clippy::result_large_err)]
 pub fn connect(mut config: ClientConfig) -> Result<Arc<Client>, ConduitError> {
+    let selected = config.provider.as_deref().and_then(provider_preset);
+    if config.provider.is_some() && selected.is_none() {
+        return Err(ConduitError::new(
+            "InvalidRequestError",
+            "Unknown provider preset.",
+        ));
+    }
+    if let Some((preset_driver, preset_endpoint)) = selected {
+        if !config.driver.is_empty() && config.driver != preset_driver {
+            return Err(ConduitError::new(
+                "InvalidRequestError",
+                "provider and driver must describe the same protocol.",
+            ));
+        }
+        if config.driver.is_empty() {
+            config.driver = preset_driver.to_string();
+        }
+        if config.endpoint.is_empty() {
+            config.endpoint = preset_endpoint;
+        }
+    }
     let driver = Driver::from_str(&config.driver)
         .ok_or_else(|| ConduitError::new("InvalidRequestError", "Unknown driver."))?;
     if config.endpoint.trim().is_empty() {
@@ -162,6 +183,20 @@ pub fn connect(mut config: ClientConfig) -> Result<Arc<Client>, ConduitError> {
         redact,
         default_timeout: config.timeout,
     }))
+}
+
+pub fn provider_manifest() -> serde_json::Value {
+    serde_json::from_str(include_str!("../providers.json")).expect("bundled provider manifest")
+}
+
+pub fn provider_preset(name: &str) -> Option<(String, String)> {
+    let manifest: serde_json::Value =
+        serde_json::from_str(include_str!("../providers.json")).expect("bundled provider manifest");
+    let entry = manifest.get("providers")?.get(name)?;
+    Some((
+        entry.get("driver")?.as_str()?.to_string(),
+        entry.get("endpoint")?.as_str()?.to_string(),
+    ))
 }
 
 impl Client {

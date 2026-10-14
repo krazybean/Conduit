@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "languages": ["typescript", "python", "rust"],
+  "capabilities": ["provider_preset", "endpoint_override"],
+  "providers": {
+    "openai": { "driver": "openai-compatible", "endpoint": "https://api.openai.com/v1", "compatibility": "unverified" },
+    "groq": { "driver": "openai-compatible", "endpoint": "https://api.groq.com/openai/v1", "compatibility": "unverified" },
+    "openrouter": { "driver": "openai-compatible", "endpoint": "https://openrouter.ai/api/v1", "compatibility": "unverified" },
+    "together": { "driver": "openai-compatible", "endpoint": "https://api.together.xyz/v1", "compatibility": "unverified" },
+    "fireworks": { "driver": "openai-compatible", "endpoint": "https://api.fireworks.ai/inference/v1", "compatibility": "unverified" },
+    "mistral": { "driver": "openai-compatible", "endpoint": "https://api.mistral.ai/v1", "compatibility": "unverified" },
+    "deepinfra": { "driver": "openai-compatible", "endpoint": "https://api.deepinfra.com/v1/openai", "compatibility": "unverified" },
+    "muse": { "driver": "openai-compatible", "endpoint": "https://api.meta.ai/v1", "compatibility": "unverified" }
+  }
+}

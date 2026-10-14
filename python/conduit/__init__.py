@@ -21,7 +21,7 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from .errors import ConduitError, ErrorCode, ERROR_CODES, http_failure
 from .types import GenerationResponse, ModelInfo, text_response
-from .providers import ProviderAdapter, for_driver
+from .providers import ProviderAdapter, for_driver, provider_manifest, provider_presets
 
 
 # ---------------------------------------------------------------------------
@@ -920,17 +920,23 @@ def connect(config: Optional[Dict[str, Any]] = None, **kwargs: Any) -> Any:
     if not isinstance(config, dict):
         raise ConduitError("InvalidRequestError", "Client configuration is required.")
     for k in config.keys():
-        if k not in ("driver", "endpoint", "credentials", "headers", "timeout", "model"):
+        if k not in ("driver", "provider", "endpoint", "credentials", "headers", "timeout", "model"):
             raise ConduitError("InvalidRequestError", "Unrecognized field; use providerOptions for native request settings.")
-    driver = config.get("driver")
+    provider_name = config.get("provider")
+    if provider_name is not None and (not isinstance(provider_name, str) or provider_name not in provider_presets):
+        raise ConduitError("InvalidRequestError", "Unknown provider preset.")
+    selected = provider_presets.get(provider_name) if provider_name is not None else None
+    driver = config.get("driver") or (selected["driver"] if selected else None)
     if driver not in ("openai-compatible", "ollama", "anthropic", "gemini"):
         raise ConduitError("InvalidRequestError", "Unknown driver.")
+    if config.get("driver") is not None and selected is not None and config["driver"] != selected["driver"]:
+        raise ConduitError("InvalidRequestError", "provider and driver must describe the same protocol.")
     endpoint_str = config.get("endpoint")
     if endpoint_str is None:
         defaults = {"ollama": "http://localhost:11434", "anthropic": "https://api.anthropic.com", "gemini": "https://generativelanguage.googleapis.com"}
-        if driver == "openai-compatible":
+        endpoint_str = selected["endpoint"] if selected else defaults.get(driver)
+        if endpoint_str is None:
             raise ConduitError("InvalidRequestError", "endpoint must be an HTTP(S) API base URL.")
-        endpoint_str = defaults[driver]
         config["endpoint"] = endpoint_str
     if not isinstance(endpoint_str, str):
         raise ConduitError("InvalidRequestError", "endpoint must be an HTTP(S) API base URL.")
@@ -1007,5 +1013,5 @@ def connect(config: Optional[Dict[str, Any]] = None, **kwargs: Any) -> Any:
     return client
 
 
-__all__ = ["connect", "Client", "Model", "ConduitError", "GenerationResponse", "ModelInfo"]
+__all__ = ["connect", "Client", "Model", "ConduitError", "GenerationResponse", "ModelInfo", "provider_manifest", "provider_presets"]
 

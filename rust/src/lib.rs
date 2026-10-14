@@ -31,7 +31,9 @@ mod client;
 mod providers;
 mod transport;
 
-pub use client::{anthropic, connect, gemini, ollama, Client, Model};
+pub use client::{
+    anthropic, connect, gemini, ollama, provider_manifest, provider_preset, Client, Model,
+};
 #[cfg(test)]
 pub(crate) use providers::anthropic::{decode_anthropic, encode_anthropic_request};
 #[cfg(test)]
