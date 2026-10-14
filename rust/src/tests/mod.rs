@@ -70,4 +70,5 @@ mod client;
 mod gemini;
 mod ollama;
 mod openai;
+mod provider_resolution;
 mod transport;
