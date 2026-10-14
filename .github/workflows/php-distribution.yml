@@ -31,7 +31,7 @@ jobs:
 
       - name: Export and validate PHP package
         env:
-          SOURCE_TAG: ${{ github.ref_name }}
+          SOURCE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
         run: |
           if [[ "$BOOTSTRAP" != "true" ]]; then
             case "$SOURCE_TAG" in
@@ -50,7 +50,7 @@ jobs:
         env:
           DIST_TOKEN: ${{ secrets.CONDUIT_PHP_DISTRIBUTION_TOKEN }}
           DIST_REPO: krazybean/krazybean-conduit-php
-          SOURCE_TAG: ${{ github.ref_name }}
+          SOURCE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
         run: |
           if [[ -z "$DIST_TOKEN" ]]; then
             echo "::error::CONDUIT_PHP_DISTRIBUTION_TOKEN is not configured. Create a narrowly scoped GitHub App or fine-grained token with Contents: Read and write on $DIST_REPO, then add it as an Actions secret."
