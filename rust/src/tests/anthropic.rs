@@ -157,7 +157,7 @@ fn anthropic_stream_first_event_before_eof() {
         stream.write_all(stop.as_bytes()).unwrap();
         stream.flush().unwrap();
         let end = "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n";
-        stream.write_all(end.as_bytes()).unwrap();
+        let _ = stream.write_all(end.as_bytes());
         stream.flush().unwrap();
     });
     let cfg = ClientConfig {
