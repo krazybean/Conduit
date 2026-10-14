@@ -9,7 +9,7 @@ composer require krazybean/conduit
 ```
 
 ```php
-use function Conduit\\connect;
+use function Conduit\connect;
 
 $model = connect(['provider' => 'openai', 'credentials' => getenv('OPENAI_API_KEY'), 'model' => 'gpt-4o-mini']);
 $response = $model->generate('Hello');

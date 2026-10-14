@@ -36,7 +36,7 @@ foreach (["php/composer.json", "php/providers.json"] as $path) {
 }
 $composer = json_decode(file_get_contents("php/composer.json"), true, 512, JSON_THROW_ON_ERROR);
 if (($composer["name"] ?? null) !== "krazybean/conduit") {
-    fwrite(STDERR, "composer package name must be krazybean/conduit\\n");
+    fwrite(STDERR, "composer package name must be krazybean/conduit\n");
     exit(1);
 }
 '
