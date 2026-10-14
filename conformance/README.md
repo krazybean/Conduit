@@ -60,6 +60,12 @@ capability gates. Its provider entries are convenience presets only and remain
 `unverified` until live conformance evidence exists; PHP is not listed or
 supported until its implementation and gate pass.
 
+`provider-resolution.json` is the shared construction/request contract for
+provider-to-driver selection, default and overridden endpoints, synthetic
+authentication/custom headers, protected-header handling, and malformed or
+unknown provider errors. Each language runner must execute every case; a
+manifest copy check alone is not sufficient.
+
 Listing: `models/ollama-tags.json` (8 cases: single/multiple/metadata/empty/malformed) and `models/openai-models.json` (9 cases: single/multiple/sparse/empty/malformed). Coverage includes provider metadata, defensive sparse objects, and ProtocolError for malformed successful payloads.
 
 Streaming: `streams/openai-text.json` adds 22 cases with explicit base64 read

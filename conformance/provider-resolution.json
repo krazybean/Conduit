@@ -1,0 +1,114 @@
+[
+  {
+    "id": "provider-openai-default",
+    "kind": "resolve",
+    "config": { "provider": "openai" },
+    "expected": { "driver": "openai-compatible", "endpoint": "https://api.openai.com/v1" }
+  },
+  {
+    "id": "provider-muse-default",
+    "kind": "resolve",
+    "config": { "provider": "muse" },
+    "expected": { "driver": "openai-compatible", "endpoint": "https://api.meta.ai/v1" }
+  },
+  {
+    "id": "driver-ollama-default",
+    "kind": "resolve",
+    "config": { "driver": "ollama" },
+    "expected": { "driver": "ollama", "endpoint": "http://localhost:11434" }
+  },
+  {
+    "id": "provider-openai-local-override-and-auth",
+    "kind": "request",
+    "config": {
+      "provider": "openai",
+      "endpoint": "http://127.0.0.1:0/v1",
+      "credentials": "synthetic-token",
+      "headers": { "x-conduit-test": "synthetic-header" }
+    },
+    "expected": {
+      "driver": "openai-compatible",
+      "path": "/v1/models",
+      "headers": { "authorization": "Bearer synthetic-token", "x-conduit-test": "synthetic-header" }
+    }
+  },
+  {
+    "id": "ollama-local-override-and-auth",
+    "kind": "request",
+    "config": {
+      "driver": "ollama",
+      "endpoint": "http://127.0.0.1:0/base/",
+      "credentials": "synthetic-token",
+      "headers": { "x-conduit-test": "synthetic-header" }
+    },
+    "expected": {
+      "driver": "ollama",
+      "path": "/base/api/tags",
+      "headers": { "authorization": "Bearer synthetic-token", "x-conduit-test": "synthetic-header" }
+    }
+  },
+  {
+    "id": "anthropic-local-auth-headers",
+    "kind": "request",
+    "config": {
+      "driver": "anthropic",
+      "endpoint": "http://127.0.0.1:0/base",
+      "credentials": "synthetic-token",
+      "headers": { "x-conduit-test": "synthetic-header" }
+    },
+    "expected": {
+      "driver": "anthropic",
+      "path": "/base/v1/models",
+      "headers": { "x-api-key": "synthetic-token", "anthropic-version": "2023-06-01", "x-conduit-test": "synthetic-header" }
+    }
+  },
+  {
+    "id": "gemini-local-auth-headers",
+    "kind": "request",
+    "config": {
+      "driver": "gemini",
+      "endpoint": "http://127.0.0.1:0/base",
+      "credentials": "synthetic-token",
+      "headers": { "x-conduit-test": "synthetic-header" }
+    },
+    "expected": {
+      "driver": "gemini",
+      "path": "/base/v1beta/models",
+      "headers": { "x-goog-api-key": "synthetic-token", "x-conduit-test": "synthetic-header" }
+    }
+  },
+  {
+    "id": "unknown-provider",
+    "kind": "error",
+    "config": { "provider": "not-a-provider" },
+    "expected": { "error": "InvalidRequestError" }
+  },
+  {
+    "id": "malformed-provider",
+    "kind": "error",
+    "config": { "provider": 42 },
+    "expected": { "error": "InvalidRequestError" }
+  },
+  {
+    "id": "provider-driver-conflict",
+    "kind": "error",
+    "config": { "provider": "muse", "driver": "ollama" },
+    "expected": { "error": "InvalidRequestError" }
+  },
+  {
+    "id": "malformed-endpoint",
+    "kind": "error",
+    "config": { "driver": "openai-compatible", "endpoint": "not-an-http-url" },
+    "expected": { "error": "InvalidRequestError" }
+  },
+  {
+    "id": "protected-header-conflict",
+    "kind": "error",
+    "config": {
+      "driver": "openai-compatible",
+      "endpoint": "http://127.0.0.1:0/v1",
+      "headers": { "Authorization": "wrong" }
+    },
+    "expected": { "error": "InvalidRequestError" }
+  }
+]
