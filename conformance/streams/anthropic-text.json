@@ -110,12 +110,12 @@
         {
           "type": "tool_call_delta",
           "index": 0,
-          "argumentsDelta": "{\"location\": \"pa"
+          "argumentsDelta": "{\"location\": \"Pa"
         },
         {
           "type": "tool_call_delta",
           "index": 0,
-          "argumentsDelta": "ris \""
+          "argumentsDelta": "ris\"}"
         },
         {
           "type": "usage",
