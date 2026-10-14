@@ -11,12 +11,13 @@ function canonical(mixed $value): mixed { if (!is_array($value)) return $value; 
 function semanticResponse(Conduit\GenerationResponse $r): array { $metadata=[]; if (isset($r->providerMetadata['finishReason'])) $metadata['finish_reason']=$r->providerMetadata['finishReason']; if (isset($r->providerMetadata['requestId'])) $metadata['request_id']=$r->providerMetadata['requestId']; foreach (['modelVersion','responseId'] as $key) if (isset($r->providerMetadata[$key])) $metadata[$key]=$r->providerMetadata[$key]; $out=['content'=>$r->content,'finish_reason'=>$r->finishReason]; if ($r->id!==null) $out['id']=$r->id; if ($r->model!==null) $out['model']=$r->model; if ($r->usage!==null) $out['usage']=$r->usage; if ($metadata) $out['provider_metadata']=$metadata; return $out; }
 function semanticEvent(array $e): array { if ($e['type'] !== 'done') return $e; return ['type'=>'done','response'=>semanticResponse($e['response'])]; }
 function serverDiagnostics(array $pipes): string { $out=[]; foreach ([1,2] as $i) { stream_set_blocking($pipes[$i], false); $text=stream_get_contents($pipes[$i]); if ($text !== false && trim($text) !== '') $out[]=$text; } return trim(implode("\n", $out)); }
+function serverReady(int $port): bool { $socket=@fsockopen('127.0.0.1',$port,$error,$message,0.1); if (!is_resource($socket)) return false; fwrite($socket,"GET /__conduit_ready__ HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"); $response=stream_get_contents($socket); fclose($socket); return is_string($response) && str_starts_with($response,"HTTP/1.1 200"); }
 function startFixtureServer(string $tmp, string $request): array {
     for ($attempt=0; $attempt<5; $attempt++) {
         $port=random_int(45000,49900); $cmd=escapeshellarg(PHP_BINARY).' -S 127.0.0.1:'.$port.' -t '.escapeshellarg(__DIR__).' '.escapeshellarg(__DIR__.'/conformance_router.php');
         $env=array_merge($_ENV,['CONDUIT_CASE_FILE'=>$tmp,'CONDUIT_REQUEST_FILE'=>$request]); $proc=proc_open($cmd,[1=>['pipe','w'],2=>['pipe','w']],$pipes,__DIR__,$env);
         if (!is_resource($proc)) continue;
-        for ($i=0; $i<100; $i++) { $status=proc_get_status($proc); if (!$status['running']) break; $socket=@fsockopen('127.0.0.1',$port); if (is_resource($socket)) { fclose($socket); return [$proc,$pipes,$port]; } usleep(10000); }
+        for ($i=0; $i<100; $i++) { $status=proc_get_status($proc); if (!$status['running']) break; if (serverReady($port)) return [$proc,$pipes,$port]; usleep(10000); }
         $diagnostics=serverDiagnostics($pipes); proc_terminate($proc); proc_close($proc);
     }
     throw new RuntimeException('fixture server failed to become ready'.(isset($diagnostics) && $diagnostics !== '' ? ': '.$diagnostics : '.'));
