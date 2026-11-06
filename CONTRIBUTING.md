@@ -15,7 +15,7 @@ Change [spec](spec/README.md) first when changing observable behavior, and add s
 Checks from the repository root:
 
 ```sh
-# TypeScript (Node 22.13+)
+# TypeScript (Node 22.23.4+)
 npm ci --prefix typescript
 npm run typecheck --prefix typescript
 npm test --prefix typescript
