@@ -8,6 +8,14 @@ Does this help connect to a provider, discover/select a model, generate/stream, 
 
 No agents, orchestration, routing, automatic selection/fallback, RAG, memory, conversation state, prompt management, workflows, eval frameworks, vector stores, tool execution/registries, DI, plugins, middleware frameworks, retry/policy engines, scoring, cost optimization, or persistent application state. No factory hierarchies, speculative extension points, or separately published provider packages. Base URL differences alone do not justify another driver.
 
+## Design and maintenance philosophy
+
+**Be uncompromising about correctness, but deliberate about scope.**
+
+A reproducible failure of supported behavior is a correctness bug, even when it affects an uncommon provider response, model, or edge case. Take reports seriously: check the contract, reproduce the failure, fix the shared root cause, and add a regression or conformance test when applicable. If a safe fix cannot ship yet, acknowledge the limitation and explain its impact and tradeoffs rather than silently accepting incorrect behavior.
+
+Evaluate new features against Conduit's small provider-driver boundary. Useful application-specific orchestration and policy still belong in the calling application; declining those features is different from dismissing a bug in supported behavior. Consider security, compatibility, and cross-language consistency when prioritizing fixes. Contributors deserve a clear rationale when a request is accepted, deferred, or declined, but taking a bug seriously does not promise an immediate fix.
+
 ## Contract and checks
 
 Change [spec](spec/README.md) first when changing observable behavior, and add shared [conformance cases](conformance/README.md) with implementation. TypeScript is not the specification. Keep language APIs idiomatic; never silently drop requested features or turn missing usage/capability evidence into zero/true. Never put real credentials in fixtures, diagnostics, or examples.
